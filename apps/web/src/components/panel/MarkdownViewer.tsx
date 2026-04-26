@@ -3,7 +3,8 @@ import { MarkdownBody } from "./MarkdownBody";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, withProject } from "@/lib/api";
+import { useActiveProject } from "@/lib/use-active-project";
 
 interface JsonShape {
   content: string;
@@ -11,8 +12,7 @@ interface JsonShape {
 }
 
 interface Props {
-  url: string;
-  format: "text" | "json";
+  endpoint: "plot" | "knowledge";
   emptyMessage?: string;
 }
 
@@ -28,19 +28,28 @@ function relTime(ts: number): string {
   return `${day}d ago`;
 }
 
-export function MarkdownViewer({ url, format, emptyMessage }: Props) {
+export function MarkdownViewer({ endpoint, emptyMessage }: Props) {
+  const activeProject = useActiveProject();
+  const format: "text" | "json" = endpoint === "plot" ? "text" : "json";
+
   const [state, setState] = useState<
+    | { kind: "idle" }
     | { kind: "loading" }
     | { kind: "error"; message: string }
     | { kind: "ready"; text: string; updatedAt?: number }
-  >({ kind: "loading" });
+  >({ kind: "idle" });
 
   useEffect(() => {
+    if (!activeProject) {
+      setState({ kind: "idle" });
+      return;
+    }
     let cancelled = false;
+    setState({ kind: "loading" });
+    const path = withProject(`/api/orchestrator/${endpoint}`, activeProject);
     const run = async () => {
       try {
-        const fullUrl = url.startsWith("http") ? url : `${API_BASE}${url}`;
-        const r = await fetch(fullUrl, { credentials: "omit" });
+        const r = await fetch(`${API_BASE}${path}`, { credentials: "omit" });
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
         if (format === "text") {
           const text = await r.text();
@@ -62,13 +71,32 @@ export function MarkdownViewer({ url, format, emptyMessage }: Props) {
           });
       }
     };
-    run();
+    void run();
     return () => {
       cancelled = true;
     };
-  }, [url, format]);
+  }, [activeProject, endpoint, format]);
 
-  if (state.kind === "loading") {
+  if (!activeProject) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>No active project</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Select a project from the sidebar, or create one in{" "}
+            <a className="underline" href="/projects">
+              Projects
+            </a>
+            .
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (state.kind === "loading" || state.kind === "idle") {
     return (
       <div className="space-y-3">
         <Skeleton className="h-6 w-1/3" />

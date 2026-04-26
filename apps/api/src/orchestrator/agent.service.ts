@@ -19,7 +19,8 @@ export class AgentServiceError extends Error {
       | 'missing_merged_commit'
       | 'invalid_merged_commit'
       | 'missing_abandoned_reason'
-      | 'no_change',
+      | 'no_change'
+      | 'project_not_found',
     public readonly detail?: string,
   ) {
     super(`agent operation failed: ${reason}${detail ? ` (${detail})` : ''}`);
@@ -29,6 +30,7 @@ export class AgentServiceError extends Error {
 
 function rowToFull(row: AgentRow): AgentFull {
   return {
+    projectPath: row.project_path,
     slug: row.slug,
     status: row.status,
     branch: row.branch,
@@ -52,24 +54,40 @@ function rowToFull(row: AgentRow): AgentFull {
 export class AgentService {
   constructor(private readonly dbService: OrchestratorDbService) {}
 
-  list(): AgentFull[] {
+  private assertProjectExistsInline(projectPath: string): void {
+    const row = this.dbService.db
+      .prepare<
+        [string],
+        { _: number }
+      >('SELECT 1 AS _ FROM projects WHERE path = ?')
+      .get(projectPath);
+    if (!row) throw new AgentServiceError('project_not_found', projectPath);
+  }
+
+  list(projectPath: string): AgentFull[] {
+    this.assertProjectExistsInline(projectPath);
     const rows = this.dbService.db
       .prepare<
-        unknown[],
+        [string],
         AgentRow
-      >('SELECT * FROM agents ORDER BY created_at DESC')
-      .all();
+      >('SELECT * FROM agents WHERE project_path = ? ORDER BY created_at DESC')
+      .all(projectPath);
     return rows.map(rowToFull);
   }
 
-  get(slug: string): AgentFull | null {
+  get(projectPath: string, slug: string): AgentFull | null {
+    this.assertProjectExistsInline(projectPath);
     const row = this.dbService.db
-      .prepare<[string], AgentRow>('SELECT * FROM agents WHERE slug = ?')
-      .get(slug);
+      .prepare<
+        [string, string],
+        AgentRow
+      >('SELECT * FROM agents WHERE project_path = ? AND slug = ?')
+      .get(projectPath, slug);
     return row ? rowToFull(row) : null;
   }
 
-  create(input: AgentCreateInput): AgentFull {
+  create(projectPath: string, input: AgentCreateInput): AgentFull {
+    this.assertProjectExistsInline(projectPath);
     if (!SLUG_RE.test(input.slug)) {
       throw new AgentServiceError('invalid_slug', input.slug);
     }
@@ -79,12 +97,13 @@ export class AgentService {
       this.dbService.db
         .prepare(
           `INSERT INTO agents (
-             slug, status, branch, worktree, reserved_paths_json,
+             project_path, slug, status, branch, worktree, reserved_paths_json,
              request, plan, impl_prompt, coordination_brief, post_merge_notes,
              created_at, updated_at
-           ) VALUES (?, 'draft', ?, ?, ?, ?, ?, ?, ?, '', ?, ?)`,
+           ) VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, '', ?, ?)`,
         )
         .run(
+          projectPath,
           input.slug,
           input.branch,
           input.worktree,
@@ -103,13 +122,18 @@ export class AgentService {
       }
       throw err;
     }
-    const created = this.get(input.slug);
+    const created = this.get(projectPath, input.slug);
     if (!created) throw new AgentServiceError('not_found', input.slug);
     return created;
   }
 
-  update(slug: string, patch: Omit<AgentUpdateInput, 'slug'>): AgentFull {
-    const existing = this.get(slug);
+  update(
+    projectPath: string,
+    slug: string,
+    patch: Omit<AgentUpdateInput, 'slug'>,
+  ): AgentFull {
+    this.assertProjectExistsInline(projectPath);
+    const existing = this.get(projectPath, slug);
     if (!existing) throw new AgentServiceError('not_found', slug);
 
     const now = Date.now();
@@ -175,12 +199,14 @@ export class AgentService {
 
     if (sets.length === 1) throw new AgentServiceError('no_change', slug);
 
-    params.push(slug);
+    params.push(projectPath, slug);
     this.dbService.db
-      .prepare(`UPDATE agents SET ${sets.join(', ')} WHERE slug = ?`)
+      .prepare(
+        `UPDATE agents SET ${sets.join(', ')} WHERE project_path = ? AND slug = ?`,
+      )
       .run(...params);
 
-    const updated = this.get(slug);
+    const updated = this.get(projectPath, slug);
     if (!updated) throw new AgentServiceError('not_found', slug);
     return updated;
   }

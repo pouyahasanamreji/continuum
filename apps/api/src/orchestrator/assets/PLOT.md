@@ -9,17 +9,36 @@ This document is project-agnostic. Project-specific facts (base
 branch name, convention-doc paths, shared-file names, naming
 patterns, reference modules) live in `.orchestrator/knowledge.md`.
 
+## Orchestrator state
+
+Orchestrator state (PLOT, knowledge, agents, registry) is stored in
+the orchestrator MCP, scoped per project. Every project is identified
+by its canonical absolute path (your `pwd`). Every MCP call into
+project-scoped state takes a `project` argument equal to the path.
+
+13 MCP tools available:
+
+- **Project**: `project_list`, `project_get`, `project_create`,
+  `project_rename`, `project_delete`
+- **PLOT**: `plot`, `plot_update`
+- **Knowledge**: `knowledge_get`, `knowledge_update`
+- **Agents**: `registry_list`, `agent_get`, `agent_create`,
+  `agent_update`
+
 ## Workflow
 
 Every human-given task runs through four phases.
 
 ### 1. Intake
 
-- Capture the task verbatim from the human.
-- List currently active parallel agents and the paths/files each one
-  reserves. If none are active, say so explicitly.
-- Ask clarifying questions **only** when a conflict cannot be resolved
-  without human input. Otherwise proceed.
+0. Resolve project. Send your `pwd` to `project_get`. If not found,
+   `project_create`. All subsequent calls in this conversation pass
+   that path as the `project` arg.
+1. Capture the task verbatim from the human.
+2. List currently active parallel agents and the paths/files each one
+   reserves. If none are active, say so explicitly.
+3. Ask clarifying questions **only** when a conflict cannot be
+   resolved without human input. Otherwise proceed.
 
 ### 2. Research
 
@@ -101,9 +120,10 @@ list:
 ## Active agent registry
 
 The orchestrator maintains the current set of active agents and
-their reserved paths in `.orchestrator/REGISTRY.md` (see Persistence
-below). Re-verify the registry before dispatching any new agent. If
-a session is compacted, reconstruct from the persisted registry.
+their reserved paths in the orchestrator MCP, queryable via
+`registry_list` (see Persistence below). Re-verify the registry
+before dispatching any new agent. If a session is compacted,
+reconstruct from `registry_list`.
 
 ## What the orchestrator does NOT do
 
@@ -117,28 +137,31 @@ prompts.
 
 ## Persistence
 
-Orchestrator state lives in `.orchestrator/`:
+Orchestrator state is stored in the orchestrator SQLite, accessed via
+the MCP tools listed in **Orchestrator state** above. Keys: project
+path (canonical absolute pwd) + agent slug.
 
-- **`.orchestrator/REGISTRY.md`** — index. One row per agent: status,
-  branch, worktree, reserved-paths summary, link to detail. This is
-  the collision matrix.
-- **`.orchestrator/agents/<branch-slug>.md`** — per-dispatch record.
-  Human request, plan, impl prompt, coordination brief, reserved
-  paths, status, post-merge notes. Immutable once status flips to
-  `merged`.
-- **`.orchestrator/knowledge.md`** — compounding learnings.
-  Project-specific facts and conventions, scope-specific gotchas,
-  module-specific notes, post-merge drift lessons. Flat single file.
-  Split into `patterns/<name>.md` only when this file grows
-  unwieldy.
+- **Projects** (`project_*` tools) — canonical absolute path is the
+  primary key. Each project owns its own plot, knowledge, and agent
+  set. Same agent slug may exist across projects.
+- **PLOT** (`plot`, `plot_update`) — per-project protocol document.
+  Initialised to the default template on `project_create`. Mutated
+  via unified-diff against `PLOT.md`.
+- **Knowledge** (`knowledge_get`, `knowledge_update`) — compounding
+  learnings, project-specific. Mutated via unified-diff against
+  `knowledge.md`.
+- **Agents** (`registry_list`, `agent_get`, `agent_create`,
+  `agent_update`) — per-dispatch record. Human request, plan, impl
+  prompt, coordination brief, reserved paths, status, post-merge
+  notes. Immutable once status flips to `merged`.
 
 ### Mandatory reads at Phase 1 Intake
 
 Before planning any new dispatch, the orchestrator reads:
 
-1. `.orchestrator/REGISTRY.md` — to enumerate active agents and
+1. `registry_list` (with `project`) — to enumerate active agents and
    reserved paths.
-2. `.orchestrator/knowledge.md` — to apply project facts and
+2. `knowledge_get` (with `project`) — to apply project facts and
    accumulated learnings to the new plan.
 
 No dispatch without a fresh reading.
@@ -167,10 +190,11 @@ When the human confirms an agent is merged, the orchestrator:
 1. Reads the actual merged diff (via git log / git show on the
    integration branch).
 2. Notes any drift between the planned files and the actual files
-   in the agent's detail file under `## Post-merge notes`.
-3. Appends any reusable lesson to `.orchestrator/knowledge.md` in
-   the appropriate section.
-4. Flips the agent's status to `merged` in `REGISTRY.md`.
+   via `agent_update` under `postMergeNotes`.
+3. Appends any reusable lesson via `knowledge_update` (unified diff
+   against `knowledge.md`) in the appropriate section.
+4. Flips the agent's status to `merged` via `agent_update`
+   (`status: 'merged'`, `mergedCommit`).
 
 Skipping these steps breaks the compounding. Enforce.
 

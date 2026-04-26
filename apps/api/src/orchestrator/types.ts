@@ -1,6 +1,7 @@
 export type AgentStatus = 'draft' | 'active' | 'merged' | 'abandoned';
 
 export interface AgentRow {
+  project_path: string;
   slug: string;
   status: AgentStatus;
   branch: string;
@@ -20,6 +21,7 @@ export interface AgentRow {
 }
 
 export interface AgentFull {
+  projectPath: string;
   slug: string;
   status: AgentStatus;
   branch: string;
@@ -64,5 +66,21 @@ export interface KnowledgeUpdateResult {
 
 export interface KnowledgeReadResult {
   content: string;
+  updatedAt: number;
+}
+
+export interface ProjectFull {
+  path: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PlotReadResult {
+  content: string;
+  updatedAt: number;
+}
+
+export interface PlotUpdateResult {
   updatedAt: number;
 }

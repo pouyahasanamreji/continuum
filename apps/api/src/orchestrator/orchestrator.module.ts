@@ -8,6 +8,8 @@ import { KnowledgeService } from './knowledge.service';
 import { KnowledgeTool } from './knowledge.tool';
 import { PlotService } from './plot.service';
 import { PlotTool } from './plot.tool';
+import { ProjectService } from './project.service';
+import { ProjectTool } from './project.tool';
 import { OrchestratorController } from './orchestrator.controller';
 
 @Module({})
@@ -30,9 +32,11 @@ export class OrchestratorModule {
       controllers: restEnabled ? [OrchestratorController] : [],
       providers: [
         OrchestratorDbService,
+        ProjectService,
         KnowledgeService,
         AgentService,
         PlotService,
+        ProjectTool,
         PlotTool,
         KnowledgeTool,
         AgentTool,

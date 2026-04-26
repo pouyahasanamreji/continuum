@@ -7,39 +7,7 @@ import {
 import Database from 'better-sqlite3';
 import { dirname } from 'node:path';
 import { mkdirSync } from 'node:fs';
-
-const SCHEMA_SQL = `
-CREATE TABLE IF NOT EXISTS knowledge (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  content TEXT NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS knowledge_history (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  content TEXT NOT NULL,
-  applied_diff TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS agents (
-  slug TEXT PRIMARY KEY,
-  status TEXT NOT NULL CHECK (status IN ('draft','active','merged','abandoned')),
-  branch TEXT NOT NULL,
-  worktree TEXT NOT NULL,
-  reserved_paths_json TEXT NOT NULL DEFAULT '[]',
-  request TEXT NOT NULL DEFAULT '',
-  plan TEXT NOT NULL DEFAULT '',
-  impl_prompt TEXT NOT NULL DEFAULT '',
-  coordination_brief TEXT NOT NULL DEFAULT '',
-  post_merge_notes TEXT NOT NULL DEFAULT '',
-  created_at INTEGER NOT NULL,
-  dispatched_at INTEGER NULL,
-  updated_at INTEGER NOT NULL,
-  merged_at INTEGER NULL,
-  merged_commit TEXT NULL CHECK (merged_commit IS NULL OR length(merged_commit) >= 7),
-  abandoned_reason TEXT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
-`;
+import { migrate } from './schema';
 
 @Injectable()
 export class OrchestratorDbService implements OnModuleInit, OnModuleDestroy {
@@ -53,7 +21,7 @@ export class OrchestratorDbService implements OnModuleInit, OnModuleDestroy {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     db.pragma('busy_timeout = 5000');
-    db.exec(SCHEMA_SQL);
+    migrate(db);
     this._db = db;
     this.logger.log(`Opened SQLite at ${path}`);
   }

@@ -1,6 +1,7 @@
 export type AgentStatus = "draft" | "active" | "merged" | "abandoned";
 
 export interface AgentFull {
+  projectPath: string;
   slug: string;
   status: AgentStatus;
   branch: string;

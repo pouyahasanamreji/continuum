@@ -8,20 +8,31 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { API_BASE, getJson } from "@/lib/api";
+import { API_BASE, getJson, withProject } from "@/lib/api";
+import { useActiveProject } from "@/lib/use-active-project";
 import type { AgentFull, AgentStatus } from "@/types/agent";
 
 const STATUSES: AgentStatus[] = ["draft", "active", "merged", "abandoned"];
 const MCP_URL = `${API_BASE}/mcp`;
 
 export function Dashboard() {
+  const activeProject = useActiveProject();
   const [agents, setAgents] = useState<AgentFull[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    if (!activeProject) {
+      setAgents(null);
+      setError(null);
+      return;
+    }
     let cancelled = false;
-    getJson<AgentFull[]>("/api/orchestrator/agents")
+    setAgents(null);
+    setError(null);
+    getJson<AgentFull[]>(
+      withProject("/api/orchestrator/agents", activeProject),
+    )
       .then((data) => {
         if (!cancelled) setAgents(data);
       })
@@ -32,7 +43,7 @@ export function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [activeProject]);
 
   const counts: Record<AgentStatus, number> = {
     draft: 0,
@@ -53,6 +64,23 @@ export function Dashboard() {
       /* ignore */
     }
   };
+
+  if (!activeProject) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>No active project</CardTitle>
+          <CardDescription>
+            Select a project from the sidebar switcher, or create one in{" "}
+            <a className="underline" href="/projects">
+              Projects
+            </a>
+            .
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">

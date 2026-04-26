@@ -1,20 +1,36 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "./agents/data-table";
 import { columns } from "./agents/columns";
 import { AgentDetailDialog } from "./AgentDetailDialog";
-import { getJson } from "@/lib/api";
+import { getJson, withProject } from "@/lib/api";
+import { useActiveProject } from "@/lib/use-active-project";
 import type { AgentFull } from "@/types/agent";
 
 export function AgentsPage() {
+  const activeProject = useActiveProject();
   const [agents, setAgents] = useState<AgentFull[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<AgentFull | null>(null);
 
   useEffect(() => {
+    if (!activeProject) {
+      setAgents(null);
+      setError(null);
+      return;
+    }
     let cancelled = false;
-    getJson<AgentFull[]>("/api/orchestrator/agents")
+    setAgents(null);
+    setError(null);
+    getJson<AgentFull[]>(
+      withProject("/api/orchestrator/agents", activeProject),
+    )
       .then((data) => {
         if (!cancelled) setAgents(data);
       })
@@ -25,7 +41,26 @@ export function AgentsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [activeProject]);
+
+  if (!activeProject) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>No active project</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Select a project from the sidebar, or create one in{" "}
+            <a className="underline" href="/projects">
+              Projects
+            </a>
+            .
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (error) {
     return (
