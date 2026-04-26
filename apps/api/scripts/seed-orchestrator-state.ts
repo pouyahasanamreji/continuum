@@ -1,0 +1,318 @@
+import Database from 'better-sqlite3';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+
+const ORCHESTRATOR_ROOT = process.env.ORCHESTRATOR_ROOT ?? '/Users/h.amreji/Pers/continuum';
+const STATE_DIR = join(ORCHESTRATOR_ROOT, '.orchestrator');
+const DB_PATH = process.env.ORCHESTRATOR_DB_PATH ?? '/data/orchestrator.db';
+
+interface RegistryEntry {
+  status: string;
+  reservedPaths: string[];
+  slug: string;
+}
+
+const SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS knowledge (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  content TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS knowledge_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  content TEXT NOT NULL,
+  applied_diff TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agents (
+  slug TEXT PRIMARY KEY,
+  status TEXT NOT NULL CHECK (status IN ('draft','active','merged','abandoned')),
+  branch TEXT NOT NULL,
+  worktree TEXT NOT NULL,
+  reserved_paths_json TEXT NOT NULL DEFAULT '[]',
+  request TEXT NOT NULL DEFAULT '',
+  plan TEXT NOT NULL DEFAULT '',
+  impl_prompt TEXT NOT NULL DEFAULT '',
+  coordination_brief TEXT NOT NULL DEFAULT '',
+  post_merge_notes TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  dispatched_at INTEGER NULL,
+  updated_at INTEGER NOT NULL,
+  merged_at INTEGER NULL,
+  merged_commit TEXT NULL CHECK (merged_commit IS NULL OR length(merged_commit) >= 7),
+  abandoned_reason TEXT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
+`;
+
+function warn(msg: string): void {
+  console.warn(`[seed] WARN: ${msg}`);
+}
+
+function log(msg: string): void {
+  console.log(`[seed] ${msg}`);
+}
+
+function stripBackticks(s: string): string {
+  return s.replace(/^`+|`+$/g, '').trim();
+}
+
+function parseRegistry(text: string): RegistryEntry[] {
+  const lines = text.split('\n');
+  const entries: RegistryEntry[] = [];
+  let inTable = false;
+  let headerSeen = false;
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (!line.startsWith('|')) {
+      inTable = false;
+      headerSeen = false;
+      continue;
+    }
+    const cells = line
+      .replace(/^\|/, '')
+      .replace(/\|$/, '')
+      .split('|')
+      .map((c) => c.trim());
+    if (!headerSeen) {
+      if (cells[0]?.toLowerCase() === 'status') {
+        headerSeen = true;
+      }
+      continue;
+    }
+    if (cells.every((c) => /^-+$/.test(c))) {
+      inTable = true;
+      continue;
+    }
+    if (!inTable) continue;
+    if (cells.length < 5) continue;
+    const status = cells[0];
+    const reservedRaw = cells[3];
+    const detail = cells[4];
+    const linkMatch = detail.match(/\[([^\]]+)\]\(agents\/([^)]+)\)/);
+    if (!linkMatch) {
+      warn(`registry row missing agent link: ${line}`);
+      continue;
+    }
+    const slug = linkMatch[1];
+    const reservedPaths =
+      reservedRaw === '(released)' || reservedRaw === ''
+        ? []
+        : reservedRaw
+            .split(',')
+            .map((p) => stripBackticks(p))
+            .filter((p) => p.length > 0);
+    entries.push({ status, reservedPaths, slug });
+  }
+  return entries;
+}
+
+interface ParsedAgentDoc {
+  status: string | null;
+  branch: string | null;
+  worktree: string | null;
+  dispatched: string | null;
+  mergedCommit: string | null;
+  request: string;
+  plan: string;
+  implPrompt: string;
+  coordinationBrief: string;
+  postMergeNotes: string;
+}
+
+const SECTION_MAP: Record<string, keyof ParsedAgentDoc> = {
+  'human request (verbatim)': 'request',
+  'final plan summary': 'plan',
+  'implementation prompt': 'implPrompt',
+  'coordination brief': 'coordinationBrief',
+  'post-merge notes': 'postMergeNotes',
+};
+
+function parseAgentDoc(text: string): ParsedAgentDoc {
+  const out: ParsedAgentDoc = {
+    status: null,
+    branch: null,
+    worktree: null,
+    dispatched: null,
+    mergedCommit: null,
+    request: '',
+    plan: '',
+    implPrompt: '',
+    coordinationBrief: '',
+    postMergeNotes: '',
+  };
+
+  const bulletRe = /^-\s+\*\*([^*]+)\*\*:\s*(.+)$/;
+  const lines = text.split('\n');
+  for (const line of lines) {
+    const m = line.match(bulletRe);
+    if (!m) continue;
+    const key = m[1].trim().toLowerCase();
+    const valueRaw = m[2].trim();
+    const value = stripBackticks(valueRaw.replace(/^`([^`]+)`.*$/, '$1'));
+    if (key === 'status') out.status = value.toLowerCase();
+    else if (key === 'branch') out.branch = value;
+    else if (key.startsWith('worktree')) out.worktree = value;
+    else if (key === 'dispatched') out.dispatched = value;
+    else if (key === 'merged commit') out.mergedCommit = value;
+  }
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const headMatch = line.match(/^##\s+(.+?)\s*$/);
+    if (headMatch) {
+      const title = headMatch[1].trim().toLowerCase();
+      const target = SECTION_MAP[title];
+      i++;
+      const buf: string[] = [];
+      while (i < lines.length && !lines[i].startsWith('## ')) {
+        buf.push(lines[i]);
+        i++;
+      }
+      if (target) {
+        out[target] = buf.join('\n').trim();
+      }
+      continue;
+    }
+    i++;
+  }
+
+  for (const target of Object.values(SECTION_MAP)) {
+    if (!out[target]) {
+      warn(`agent section missing: ${target}`);
+    }
+  }
+
+  return out;
+}
+
+function dateStringToMs(s: string | null): number | null {
+  if (!s) return null;
+  const m = s.match(/(\d{4}-\d{2}-\d{2})/);
+  if (!m) return null;
+  const d = new Date(m[1] + 'T00:00:00Z');
+  return Number.isFinite(d.getTime()) ? d.getTime() : null;
+}
+
+function main(): void {
+  if (!existsSync(STATE_DIR)) {
+    console.error(`[seed] state dir not found: ${STATE_DIR}`);
+    process.exit(1);
+  }
+
+  mkdirSync(dirname(DB_PATH), { recursive: true });
+  const db = new Database(DB_PATH);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+  db.pragma('busy_timeout = 5000');
+  db.exec(SCHEMA_SQL);
+
+  const knowledgePath = join(STATE_DIR, 'knowledge.md');
+  if (!existsSync(knowledgePath)) {
+    warn(`knowledge.md missing at ${knowledgePath}`);
+  }
+  const knowledgeContent = existsSync(knowledgePath) ? readFileSync(knowledgePath, 'utf8') : '';
+
+  const registryPath = join(STATE_DIR, 'REGISTRY.md');
+  if (!existsSync(registryPath)) {
+    warn(`REGISTRY.md missing at ${registryPath}`);
+  }
+  const registryEntries = existsSync(registryPath)
+    ? parseRegistry(readFileSync(registryPath, 'utf8'))
+    : [];
+  log(`parsed ${registryEntries.length} registry rows`);
+
+  const agentsDir = join(STATE_DIR, 'agents');
+  const agentDocs: { entry: RegistryEntry; doc: ParsedAgentDoc }[] = [];
+  for (const entry of registryEntries) {
+    const fp = join(agentsDir, `${entry.slug}.md`);
+    if (!existsSync(fp)) {
+      warn(`agent doc missing: ${fp}`);
+      continue;
+    }
+    agentDocs.push({ entry, doc: parseAgentDoc(readFileSync(fp, 'utf8')) });
+  }
+
+  const orphans = existsSync(agentsDir)
+    ? readdirSync(agentsDir).filter(
+        (f) => f.endsWith('.md') && !registryEntries.some((e) => `${e.slug}.md` === f),
+      )
+    : [];
+  for (const f of orphans) warn(`agent doc not in registry: ${f}`);
+
+  const now = Date.now();
+
+  const tx = db.transaction(() => {
+    db.prepare(
+      `INSERT INTO knowledge (id, content, updated_at) VALUES (1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
+    ).run(knowledgeContent, now);
+
+    const upsert = db.prepare(`
+      INSERT INTO agents (
+        slug, status, branch, worktree, reserved_paths_json,
+        request, plan, impl_prompt, coordination_brief, post_merge_notes,
+        created_at, dispatched_at, updated_at, merged_at, merged_commit, abandoned_reason
+      ) VALUES (
+        @slug, @status, @branch, @worktree, @reserved_paths_json,
+        @request, @plan, @impl_prompt, @coordination_brief, @post_merge_notes,
+        @created_at, @dispatched_at, @updated_at, @merged_at, @merged_commit, @abandoned_reason
+      )
+      ON CONFLICT(slug) DO UPDATE SET
+        status = excluded.status,
+        branch = excluded.branch,
+        worktree = excluded.worktree,
+        reserved_paths_json = excluded.reserved_paths_json,
+        request = excluded.request,
+        plan = excluded.plan,
+        impl_prompt = excluded.impl_prompt,
+        coordination_brief = excluded.coordination_brief,
+        post_merge_notes = excluded.post_merge_notes,
+        dispatched_at = excluded.dispatched_at,
+        updated_at = excluded.updated_at,
+        merged_at = excluded.merged_at,
+        merged_commit = excluded.merged_commit,
+        abandoned_reason = excluded.abandoned_reason
+    `);
+
+    for (const { entry, doc } of agentDocs) {
+      const status = (doc.status ?? entry.status).toLowerCase();
+      if (!['draft', 'active', 'merged', 'abandoned'].includes(status)) {
+        warn(`agent ${entry.slug} has invalid status "${status}", coercing to draft`);
+      }
+      const validStatus = ['draft', 'active', 'merged', 'abandoned'].includes(status) ? status : 'draft';
+
+      const dispatchedAt = dateStringToMs(doc.dispatched);
+      const mergedCommit =
+        doc.mergedCommit && doc.mergedCommit.length >= 7 ? doc.mergedCommit.slice(0, 40) : null;
+      const mergedAt = validStatus === 'merged' ? dispatchedAt ?? now : null;
+
+      upsert.run({
+        slug: entry.slug,
+        status: validStatus,
+        branch: doc.branch ?? '',
+        worktree: doc.worktree ?? '',
+        reserved_paths_json: JSON.stringify(entry.reservedPaths),
+        request: doc.request,
+        plan: doc.plan,
+        impl_prompt: doc.implPrompt,
+        coordination_brief: doc.coordinationBrief,
+        post_merge_notes: doc.postMergeNotes,
+        created_at: dispatchedAt ?? now,
+        dispatched_at: dispatchedAt,
+        updated_at: now,
+        merged_at: mergedAt,
+        merged_commit: mergedCommit,
+        abandoned_reason: null,
+      });
+      log(`upserted agent ${entry.slug} (status=${validStatus})`);
+    }
+  });
+  tx.immediate();
+
+  db.close();
+  log(`seed complete -> ${resolve(DB_PATH)}`);
+}
+
+main();

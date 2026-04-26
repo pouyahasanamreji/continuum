@@ -3,22 +3,31 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "build": "nest build",
+    "build": "pnpm sync-plot && nest build",
     "start": "nest start",
-    "dev": "nest start --watch",
+    "dev": "pnpm sync-plot && nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "check-types": "tsc --noEmit",
     "test": "jest",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "sync-plot": "tsx scripts/sync-plot.ts",
+    "sync-plot:check": "tsx scripts/sync-plot.ts --check",
+    "seed": "tsx scripts/seed-orchestrator-state.ts",
+    "mcp:dev": "ORCHESTRATOR_PLOT_PATH=../../../PLOT.md ORCHESTRATOR_DB_PATH=./.local-data/orchestrator.db nest start --watch"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.10.0",
     "@nestjs/common": "^11.1.19",
     "@nestjs/core": "^11.1.19",
     "@nestjs/platform-express": "^11.1.19",
+    "@rekog/mcp-nest": "1.9.9",
+    "better-sqlite3": "^12.9.0",
+    "diff": "^9.0.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "zod": "^4.3.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -28,6 +37,7 @@
     "@repo/typescript-config": "workspace:*",
     "@swc/cli": "^0.6.0",
     "@swc/core": "^1.10.8",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",
@@ -45,6 +55,7 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.50.0"
   },
