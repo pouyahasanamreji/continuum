@@ -1,4 +1,4 @@
-export const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? "http://127.0.0.1:3000";
+export const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? "http://127.0.0.1:7776";
 
 export async function getJson<T>(path: string): Promise<T> {
   const r = await fetch(`${API_BASE}${path}`, { credentials: "omit" });

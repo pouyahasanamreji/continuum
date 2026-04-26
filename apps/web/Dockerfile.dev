@@ -8,6 +8,6 @@ WORKDIR /repo
 ENV CHOKIDAR_USEPOLLING=true \
     CHOKIDAR_INTERVAL=400 \
     NODE_ENV=development
-EXPOSE 4321
+EXPOSE 7777
 WORKDIR /repo/apps/web
 CMD ["sh", "-c", "cd /repo && pnpm install --frozen-lockfile && pnpm --filter @continuum/web dev -- --host 0.0.0.0"]

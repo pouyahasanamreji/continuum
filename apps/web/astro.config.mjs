@@ -6,7 +6,7 @@ import { fileURLToPath, URL } from "node:url";
 
 export default defineConfig({
   integrations: [react()],
-  server: { host: true, port: 4321 },
+  server: { host: true, port: 7777 },
   vite: {
     plugins: [tailwindcss()],
     resolve: {

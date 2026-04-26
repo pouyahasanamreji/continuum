@@ -11,7 +11,7 @@ WORKDIR /repo
 ENV CHOKIDAR_USEPOLLING=true \
     CHOKIDAR_INTERVAL=400 \
     NODE_ENV=development \
-    PORT=3000
-EXPOSE 3000
+    PORT=7776
+EXPOSE 7776
 WORKDIR /repo/apps/api
 CMD ["sh", "-c", "cd /repo && pnpm install --frozen-lockfile && pnpm --filter @continuum/api dev"]

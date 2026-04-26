@@ -26,10 +26,10 @@ RUN pnpm --filter @continuum/api deploy --legacy --prod /deploy
 
 FROM node:22.12-bookworm-slim AS runtime
 WORKDIR /app
-ENV NODE_ENV=production PORT=3000 ORCHESTRATOR_DB_PATH=/data/orchestrator.db
+ENV NODE_ENV=production PORT=7776 ORCHESTRATOR_DB_PATH=/data/orchestrator.db
 RUN mkdir -p /data && chown -R node:node /data
 USER node
 COPY --from=build --chown=node:node /deploy /app
-EXPOSE 3000
+EXPOSE 7776
 VOLUME ["/data"]
 CMD ["node", "dist/main.js"]
