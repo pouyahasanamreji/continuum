@@ -1,0 +1,13 @@
+# syntax=docker/dockerfile:1.7
+FROM node:22.12-bookworm-slim
+ENV CI=1
+RUN npm install -g corepack@latest \
+ && corepack enable \
+ && corepack prepare pnpm@10.33.2 --activate
+WORKDIR /repo
+ENV CHOKIDAR_USEPOLLING=true \
+    CHOKIDAR_INTERVAL=400 \
+    NODE_ENV=development
+EXPOSE 4321
+WORKDIR /repo/apps/web
+CMD ["sh", "-c", "cd /repo && pnpm install --frozen-lockfile && pnpm --filter @continuum/web dev -- --host 0.0.0.0"]

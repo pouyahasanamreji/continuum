@@ -1,4 +1,6 @@
 node_modules
+.local-data
+.pnpm-store
 .pnp
 .pnp.js
 .env

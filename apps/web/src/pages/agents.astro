@@ -1,0 +1,7 @@
+---
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import { AgentsPage } from "@/components/panel/AgentsPage";
+---
+<PanelLayout activeRoute="/agents" title="Agents">
+  <AgentsPage client:load />
+</PanelLayout>

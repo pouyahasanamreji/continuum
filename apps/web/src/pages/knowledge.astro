@@ -1,0 +1,8 @@
+---
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import { MarkdownViewer } from "@/components/panel/MarkdownViewer";
+const apiBase = import.meta.env.PUBLIC_API_BASE_URL ?? "http://127.0.0.1:3000";
+---
+<PanelLayout activeRoute="/knowledge" title="Knowledge">
+  <MarkdownViewer client:load url={`${apiBase}/api/orchestrator/knowledge`} format="json" />
+</PanelLayout>

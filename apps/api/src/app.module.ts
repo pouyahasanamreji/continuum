@@ -4,7 +4,7 @@ import { AppService } from './app.service';
 import { OrchestratorModule } from './orchestrator/orchestrator.module';
 
 @Module({
-  imports: [OrchestratorModule],
+  imports: [OrchestratorModule.forRoot()],
   controllers: [AppController],
   providers: [AppService],
 })

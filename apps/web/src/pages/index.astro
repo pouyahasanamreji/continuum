@@ -1,18 +1,7 @@
 ---
-import "../styles/global.css";
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import { Dashboard } from "@/components/panel/Dashboard";
 ---
-
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro + Tailwind + shadcn/ui</title>
-	</head>
-	<body>
-		<div class="grid place-items-center h-screen content-center">
-			<h1 class="text-3xl font-bold">continuum</h1>
-		</div>
-	</body>
-</html>
+<PanelLayout activeRoute="/" title="Dashboard">
+  <Dashboard client:load />
+</PanelLayout>
