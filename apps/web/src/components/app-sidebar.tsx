@@ -4,7 +4,7 @@ import * as React from "react"
 
 import { NavMain } from "@/components/nav-main"
 import { NavUser } from "@/components/nav-user"
-import { TeamSwitcher } from "@/components/team-switcher"
+import { ProjectSwitcher } from "@/components/panel/ProjectSwitcher"
 import {
   Sidebar,
   SidebarContent,
@@ -13,11 +13,11 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import {
-  GalleryVerticalEndIcon,
   LayoutDashboardIcon,
   ScrollTextIcon,
   BookOpenIcon,
   UsersIcon,
+  FolderKanbanIcon,
 } from "lucide-react"
 
 const data = {
@@ -26,18 +26,17 @@ const data = {
     email: "automationteam@sigmatelecom.com",
     avatar: "",
   },
-  teams: [
-    {
-      name: "Continuum",
-      logo: <GalleryVerticalEndIcon />,
-      plan: "dev",
-    },
-  ],
   navMain: [
     {
       title: "Dashboard",
       url: "/",
       icon: <LayoutDashboardIcon />,
+      isActive: false,
+    },
+    {
+      title: "Projects",
+      url: "/projects",
+      icon: <FolderKanbanIcon />,
       isActive: false,
     },
     {
@@ -72,7 +71,7 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <TeamSwitcher teams={data.teams} />
+        <ProjectSwitcher />
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={navItemsWithActive} />

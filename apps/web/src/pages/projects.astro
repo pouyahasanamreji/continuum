@@ -1,0 +1,7 @@
+---
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import { ProjectsPage } from "@/components/panel/projects/ProjectsPage";
+---
+<PanelLayout activeRoute="/projects" title="Projects">
+  <ProjectsPage client:load />
+</PanelLayout>

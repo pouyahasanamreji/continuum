@@ -28,7 +28,15 @@ export function AgentDetailDialog({ agent, onOpenChange }: Props) {
               : "Select an agent to view details."}
           </DialogDescription>
         </DialogHeader>
-        {agent ? <MarkdownBody text={agentToMarkdown(agent)} /> : null}
+        {agent ? (
+          <>
+            <p className="text-xs text-muted-foreground">
+              Project:{" "}
+              <span className="font-mono">{agent.projectPath}</span>
+            </p>
+            <MarkdownBody text={agentToMarkdown(agent)} />
+          </>
+        ) : null}
       </DialogContent>
     </Dialog>
   );
