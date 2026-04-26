@@ -1,6 +1,5 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { applyPatch, parsePatch } from 'diff';
 import { OrchestratorDbService } from './db.service';
 import type { PlotReadResult, PlotUpdateResult } from './types';
@@ -39,13 +38,18 @@ export class PlotService implements OnModuleInit {
 
   private loadTemplate(): string {
     const envPath = process.env.ORCHESTRATOR_PLOT_PATH;
-    if (envPath && existsSync(envPath)) {
-      this.loadedFrom = envPath;
-      return readFileSync(envPath, 'utf8');
+    if (!envPath) {
+      throw new Error(
+        'ORCHESTRATOR_PLOT_PATH is required (canonical PLOT.md path)',
+      );
     }
-    const bundled = join(__dirname, 'assets', 'PLOT.md');
-    this.loadedFrom = bundled;
-    return readFileSync(bundled, 'utf8');
+    if (!existsSync(envPath)) {
+      throw new Error(
+        `ORCHESTRATOR_PLOT_PATH points to a missing file: ${envPath}`,
+      );
+    }
+    this.loadedFrom = envPath;
+    return readFileSync(envPath, 'utf8');
   }
 
   defaultTemplate(): string {
