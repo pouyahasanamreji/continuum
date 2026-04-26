@@ -7,7 +7,7 @@ import type {
   AgentUpdateInput,
 } from './types';
 
-const SLUG_RE = /^[a-z][a-z0-9-]*$/;
+export const SLUG_RE = /^[a-z][a-z0-9-]*$/;
 
 export class AgentServiceError extends Error {
   constructor(

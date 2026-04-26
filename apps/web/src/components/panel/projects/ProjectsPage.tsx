@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ProjectsTable } from "./ProjectsTable";
 import { columns } from "./columns";
 import { CreateProjectDialog } from "./CreateProjectDialog";
+import { MigrateProjectDialog } from "./MigrateProjectDialog";
 import { RenameProjectDialog } from "./RenameProjectDialog";
 import { DeleteProjectAlert } from "./DeleteProjectAlert";
 import {
@@ -23,13 +24,14 @@ import {
 import { useProjects } from "@/lib/use-projects";
 import { setActiveProject } from "@/lib/active-project-store";
 import { useActiveProject } from "@/lib/use-active-project";
-import { PlusIcon } from "lucide-react";
+import { FolderUpIcon, PlusIcon } from "lucide-react";
 import type { ProjectFull } from "@/types/project";
 
 export function ProjectsPage() {
   const { projects, loading, error, refresh } = useProjects();
   const activePath = useActiveProject();
   const [createOpen, setCreateOpen] = useState(false);
+  const [migrateOpen, setMigrateOpen] = useState(false);
   const [selected, setSelected] = useState<ProjectFull | null>(null);
   const [renaming, setRenaming] = useState<ProjectFull | null>(null);
   const [deleting, setDeleting] = useState<ProjectFull | null>(null);
@@ -56,10 +58,16 @@ export function ProjectsPage() {
             Each project is keyed by canonical absolute path.
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <PlusIcon className="mr-2 size-4" />
-          New project
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setMigrateOpen(true)}>
+            <FolderUpIcon className="mr-2 size-4" />
+            Migrate from folder
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>
+            <PlusIcon className="mr-2 size-4" />
+            New project
+          </Button>
+        </div>
       </div>
 
       {loading && projects === null ? (
@@ -82,6 +90,12 @@ export function ProjectsPage() {
           setActiveProject(p.path);
           void refresh();
         }}
+      />
+
+      <MigrateProjectDialog
+        open={migrateOpen}
+        onOpenChange={setMigrateOpen}
+        onMigrated={() => void refresh()}
       />
 
       <RenameProjectDialog

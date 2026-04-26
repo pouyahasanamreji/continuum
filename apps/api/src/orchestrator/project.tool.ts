@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { Tool } from '@rekog/mcp-nest';
 import { z } from 'zod';
 import { ProjectService, ProjectServiceError } from './project.service';
+import { MigrationService } from './migration.service';
+import type { MigrationInput } from './migration.service';
 
 function toolError(err: unknown) {
   const msg =
@@ -24,7 +26,10 @@ function toolSuccess(value: unknown) {
 
 @Injectable()
 export class ProjectTool {
-  constructor(private readonly projects: ProjectService) {}
+  constructor(
+    private readonly projects: ProjectService,
+    private readonly migration: MigrationService,
+  ) {}
 
   @Tool({
     name: 'project_list',
@@ -99,6 +104,28 @@ export class ProjectTool {
   projectDelete(args: { path: string }) {
     try {
       return toolSuccess(this.projects.delete(args.path));
+    } catch (e) {
+      return toolError(e);
+    }
+  }
+
+  @Tool({
+    name: 'project_migrate',
+    description:
+      "Upsert a project's plot/knowledge/agents from raw markdown. Creates project if missing. Never deletes.",
+    parameters: z.object({
+      path: z.string(),
+      name: z.string().optional(),
+      plotContent: z.string().optional(),
+      knowledgeContent: z.string().optional(),
+      agents: z
+        .array(z.object({ slug: z.string(), content: z.string() }))
+        .default([]),
+    }),
+  })
+  projectMigrate(args: MigrationInput) {
+    try {
+      return toolSuccess(this.migration.migrate(args));
     } catch (e) {
       return toolError(e);
     }
