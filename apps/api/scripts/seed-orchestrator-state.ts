@@ -2,6 +2,11 @@ import Database from 'better-sqlite3';
 import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { migrate } from '../src/orchestrator/schema';
+import {
+  dateStringToMs,
+  parseAgentDoc,
+  stripBackticks,
+} from '../src/orchestrator/state-parser';
 
 const ORCHESTRATOR_ROOT =
   process.env.ORCHESTRATOR_ROOT ?? '/Users/h.amreji/Pers/continuum';
@@ -24,10 +29,6 @@ function warn(msg: string): void {
 
 function log(msg: string): void {
   console.log(`[seed] ${msg}`);
-}
-
-function stripBackticks(s: string): string {
-  return s.replace(/^`+|`+$/g, '').trim();
 }
 
 function parseRegistry(text: string): RegistryEntry[] {
@@ -80,94 +81,6 @@ function parseRegistry(text: string): RegistryEntry[] {
   return entries;
 }
 
-interface ParsedAgentDoc {
-  status: string | null;
-  branch: string | null;
-  worktree: string | null;
-  dispatched: string | null;
-  mergedCommit: string | null;
-  request: string;
-  plan: string;
-  implPrompt: string;
-  coordinationBrief: string;
-  postMergeNotes: string;
-}
-
-const SECTION_MAP: Record<string, keyof ParsedAgentDoc> = {
-  'human request (verbatim)': 'request',
-  'final plan summary': 'plan',
-  'implementation prompt': 'implPrompt',
-  'coordination brief': 'coordinationBrief',
-  'post-merge notes': 'postMergeNotes',
-};
-
-function parseAgentDoc(text: string): ParsedAgentDoc {
-  const out: ParsedAgentDoc = {
-    status: null,
-    branch: null,
-    worktree: null,
-    dispatched: null,
-    mergedCommit: null,
-    request: '',
-    plan: '',
-    implPrompt: '',
-    coordinationBrief: '',
-    postMergeNotes: '',
-  };
-
-  const bulletRe = /^-\s+\*\*([^*]+)\*\*:\s*(.+)$/;
-  const lines = text.split('\n');
-  for (const line of lines) {
-    const m = line.match(bulletRe);
-    if (!m) continue;
-    const key = m[1].trim().toLowerCase();
-    const valueRaw = m[2].trim();
-    const value = stripBackticks(valueRaw.replace(/^`([^`]+)`.*$/, '$1'));
-    if (key === 'status') out.status = value.toLowerCase();
-    else if (key === 'branch') out.branch = value;
-    else if (key.startsWith('worktree')) out.worktree = value;
-    else if (key === 'dispatched') out.dispatched = value;
-    else if (key === 'merged commit') out.mergedCommit = value;
-  }
-
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    const headMatch = line.match(/^##\s+(.+?)\s*$/);
-    if (headMatch) {
-      const title = headMatch[1].trim().toLowerCase();
-      const target = SECTION_MAP[title];
-      i++;
-      const buf: string[] = [];
-      while (i < lines.length && !lines[i].startsWith('## ')) {
-        buf.push(lines[i]);
-        i++;
-      }
-      if (target) {
-        out[target] = buf.join('\n').trim();
-      }
-      continue;
-    }
-    i++;
-  }
-
-  for (const target of Object.values(SECTION_MAP)) {
-    if (!out[target]) {
-      warn(`agent section missing: ${target}`);
-    }
-  }
-
-  return out;
-}
-
-function dateStringToMs(s: string | null): number | null {
-  if (!s) return null;
-  const m = s.match(/(\d{4}-\d{2}-\d{2})/);
-  if (!m) return null;
-  const d = new Date(m[1] + 'T00:00:00Z');
-  return Number.isFinite(d.getTime()) ? d.getTime() : null;
-}
-
 function main(): void {
   if (!existsSync(STATE_DIR)) {
     console.error(`[seed] state dir not found: ${STATE_DIR}`);
@@ -206,14 +119,19 @@ function main(): void {
   log(`parsed ${registryEntries.length} registry rows`);
 
   const agentsDir = join(STATE_DIR, 'agents');
-  const agentDocs: { entry: RegistryEntry; doc: ParsedAgentDoc }[] = [];
+  const agentDocs: {
+    entry: RegistryEntry;
+    doc: ReturnType<typeof parseAgentDoc>['parsed'];
+  }[] = [];
   for (const entry of registryEntries) {
     const fp = join(agentsDir, `${entry.slug}.md`);
     if (!existsSync(fp)) {
       warn(`agent doc missing: ${fp}`);
       continue;
     }
-    agentDocs.push({ entry, doc: parseAgentDoc(readFileSync(fp, 'utf8')) });
+    const { parsed, warnings } = parseAgentDoc(readFileSync(fp, 'utf8'));
+    for (const w of warnings) warn(`agent ${entry.slug}: ${w}`);
+    agentDocs.push({ entry, doc: parsed });
   }
 
   const orphans = existsSync(agentsDir)
@@ -283,7 +201,7 @@ function main(): void {
         ? status
         : 'draft';
 
-      const dispatchedAt = dateStringToMs(doc.dispatched);
+      const dispatchedAt = dateStringToMs(doc.dispatchedAt);
       const mergedCommit =
         doc.mergedCommit && doc.mergedCommit.length >= 7
           ? doc.mergedCommit.slice(0, 40)

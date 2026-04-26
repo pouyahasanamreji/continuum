@@ -10,6 +10,7 @@ import {
   NotFoundException,
   Param,
   Patch,
+  PayloadTooLargeException,
   Post,
   Query,
 } from '@nestjs/common';
@@ -17,6 +18,8 @@ import { PlotService, PlotServiceError } from './plot.service';
 import { KnowledgeService, KnowledgeUpdateError } from './knowledge.service';
 import { AgentService, AgentServiceError } from './agent.service';
 import { ProjectService, ProjectServiceError } from './project.service';
+import { MigrationService } from './migration.service';
+import type { MigrationInput } from './migration.service';
 
 const decodePath = (encoded: string): string =>
   Buffer.from(encoded.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString(
@@ -71,6 +74,7 @@ export class OrchestratorController {
     private readonly knowledge: KnowledgeService,
     private readonly agents: AgentService,
     private readonly projects: ProjectService,
+    private readonly migration: MigrationService,
   ) {}
 
   @Get('projects')
@@ -106,6 +110,34 @@ export class OrchestratorController {
     }
     try {
       return this.projects.create({ path: body.path, name: body.name });
+    } catch (e) {
+      mapServiceError(e);
+    }
+  }
+
+  @Post('projects/migrate')
+  @HttpCode(200)
+  migrateProject(@Body() body: MigrationInput) {
+    if (!body || typeof body.path !== 'string') {
+      throw new BadRequestException({
+        reason: 'invalid_path',
+        detail: 'missing path',
+      });
+    }
+    if (body.agents !== undefined && !Array.isArray(body.agents)) {
+      throw new BadRequestException({
+        reason: 'invalid_agents',
+        detail: 'agents must be an array',
+      });
+    }
+    if (body.agents && body.agents.length > 200) {
+      throw new PayloadTooLargeException({
+        reason: 'too_many_agents',
+        detail: '>200 agents',
+      });
+    }
+    try {
+      return this.migration.migrate(body);
     } catch (e) {
       mapServiceError(e);
     }

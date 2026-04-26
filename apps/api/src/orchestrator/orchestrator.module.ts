@@ -10,6 +10,7 @@ import { PlotService } from './plot.service';
 import { PlotTool } from './plot.tool';
 import { ProjectService } from './project.service';
 import { ProjectTool } from './project.tool';
+import { MigrationService } from './migration.service';
 import { OrchestratorController } from './orchestrator.controller';
 
 @Module({})
@@ -36,6 +37,7 @@ export class OrchestratorModule {
         KnowledgeService,
         AgentService,
         PlotService,
+        MigrationService,
         ProjectTool,
         PlotTool,
         KnowledgeTool,
