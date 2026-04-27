@@ -5,7 +5,11 @@ import { ProjectService } from '../project/project.service';
 import { PlotService } from '../plot/plot.service';
 import { AgentService } from '../agent/agent.service';
 import { SLUG_RE } from '../common/slug';
-import { dateStringToMs, parseAgentDoc, ParsedAgent } from './domain/state-parser';
+import {
+  dateStringToMs,
+  parseAgentDoc,
+  ParsedAgent,
+} from './domain/state-parser';
 
 export interface MigrationInput {
   path: string;

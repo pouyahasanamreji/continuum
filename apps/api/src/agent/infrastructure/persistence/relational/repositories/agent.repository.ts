@@ -170,8 +170,7 @@ export class AgentRelationalRepository extends AgentRepository {
         impl_prompt: payload.implPrompt,
         coordination_brief: payload.coordinationBrief,
         post_merge_notes: payload.postMergeNotes,
-        created_at:
-          existing?.created_at ?? payload.dispatchedAt ?? payload.now,
+        created_at: existing?.created_at ?? payload.dispatchedAt ?? payload.now,
         dispatched_at: payload.dispatchedAt,
         updated_at: payload.now,
         merged_at: payload.mergedAt,
