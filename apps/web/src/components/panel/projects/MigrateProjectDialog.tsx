@@ -32,12 +32,13 @@ interface MigrationBody {
 
 interface Picked {
   plotContent: string | null;
+  plotFilename: string | null;
   knowledgeContent: string | null;
+  knowledgeFilename: string | null;
+  registryIgnored: boolean;
   agents: Array<{ slug: string; content: string }>;
-  rejected: string[];
-  rootName: string | null;
-  fileCount: number;
-  warnDotfileStrip: boolean;
+  knowledgeRejected: string[];
+  agentsRejected: string[];
 }
 
 interface Props {
@@ -47,12 +48,22 @@ interface Props {
 }
 
 const SLUG_FILE_RE = /^[a-z][a-z0-9-]*\.md$/;
-const MAX_FILES = 5000;
+
+const initialPicked: Picked = {
+  plotContent: null,
+  plotFilename: null,
+  knowledgeContent: null,
+  knowledgeFilename: null,
+  registryIgnored: false,
+  agents: [],
+  knowledgeRejected: [],
+  agentsRejected: [],
+};
 
 export function MigrateProjectDialog({ open, onOpenChange, onMigrated }: Props) {
   const [path, setPath] = useState("");
   const [name, setName] = useState("");
-  const [picked, setPicked] = useState<Picked | null>(null);
+  const [picked, setPicked] = useState<Picked>(initialPicked);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MigrationResult | null>(null);
@@ -60,101 +71,75 @@ export function MigrateProjectDialog({ open, onOpenChange, onMigrated }: Props) 
   const reset = () => {
     setPath("");
     setName("");
-    setPicked(null);
+    setPicked(initialPicked);
     setBusy(false);
     setError(null);
     setResult(null);
   };
 
-  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) {
-      setError("No files selected (or browser denied permission).");
-      setPicked(null);
-      return;
-    }
-    if (files.length > MAX_FILES) {
-      setError(
-        `Folder contains ${files.length} files (limit ${MAX_FILES}). Pick a tighter folder.`,
-      );
-      setPicked(null);
+  const onPickPlot = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.name !== "PLOT.md") {
+      setError(`Expected PLOT.md, got "${f.name}". Filename is case-sensitive.`);
+      e.target.value = "";
       return;
     }
     setError(null);
-
-    let plotContent: string | null = null;
-    let knowledgeContent: string | null = null;
-    const agents: Array<{ slug: string; content: string }> = [];
-    const rejected: string[] = [];
-    let rootName: string | null = null;
-    let sawAnyOrchestratorFile = false;
-
-    for (const file of Array.from(files)) {
-      const rel = file.webkitRelativePath;
-      if (!rel) continue;
-      const segments = rel.split("/");
-      if (rootName === null) rootName = segments[0] ?? null;
-      const tail = segments.slice(1);
-
-      if (tail.length === 1 && tail[0] === "PLOT.md") {
-        plotContent = await file.text();
-        continue;
-      }
-
-      if (
-        tail.length === 2 &&
-        tail[0] === ".orchestrator" &&
-        tail[1] === "knowledge.md"
-      ) {
-        knowledgeContent = await file.text();
-        sawAnyOrchestratorFile = true;
-        continue;
-      }
-
-      if (
-        tail.length === 3 &&
-        tail[0] === ".orchestrator" &&
-        tail[1] === "agents"
-      ) {
-        const basename = tail[2]!;
-        if (basename === "REGISTRY.md") {
-          sawAnyOrchestratorFile = true;
-          continue;
-        }
-        if (SLUG_FILE_RE.test(basename)) {
-          const content = await file.text();
-          agents.push({ slug: basename.replace(/\.md$/, ""), content });
-          sawAnyOrchestratorFile = true;
-        } else if (basename.endsWith(".md")) {
-          rejected.push(basename);
-          sawAnyOrchestratorFile = true;
-        }
-        continue;
-      }
-    }
-
-    const warnDotfileStrip = plotContent !== null && !sawAnyOrchestratorFile;
-
-    setPicked({
-      plotContent,
-      knowledgeContent,
-      agents,
-      rejected,
-      rootName,
-      fileCount: files.length,
-      warnDotfileStrip,
-    });
+    const content = await f.text();
+    setPicked((p) => ({ ...p, plotContent: content, plotFilename: f.name }));
   };
 
-  const submitDisabled =
-    busy ||
-    path.trim() === "" ||
-    !picked ||
-    !(
-      picked.plotContent !== null ||
-      picked.knowledgeContent !== null ||
-      picked.agents.length > 0
-    );
+  const onPickKnowledge = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setError(null);
+    let knowledgeContent: string | null = null;
+    let knowledgeFilename: string | null = null;
+    let registryIgnored = false;
+    const rejected: string[] = [];
+    for (const f of Array.from(files)) {
+      if (f.name === "knowledge.md") {
+        knowledgeContent = await f.text();
+        knowledgeFilename = f.name;
+      } else if (f.name === "REGISTRY.md") {
+        registryIgnored = true;
+      } else {
+        rejected.push(f.name);
+      }
+    }
+    setPicked((p) => ({
+      ...p,
+      knowledgeContent,
+      knowledgeFilename,
+      registryIgnored,
+      knowledgeRejected: rejected,
+    }));
+  };
+
+  const onPickAgents = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setError(null);
+    const agents: Array<{ slug: string; content: string }> = [];
+    const rejected: string[] = [];
+    for (const f of Array.from(files)) {
+      if (SLUG_FILE_RE.test(f.name)) {
+        const content = await f.text();
+        agents.push({ slug: f.name.replace(/\.md$/, ""), content });
+      } else {
+        rejected.push(f.name);
+      }
+    }
+    setPicked((p) => ({ ...p, agents, agentsRejected: rejected }));
+  };
+
+  const hasAny =
+    picked.plotContent !== null ||
+    picked.knowledgeContent !== null ||
+    picked.agents.length > 0;
+
+  const submitDisabled = busy || path.trim() === "" || !hasAny;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,18 +149,11 @@ export function MigrateProjectDialog({ open, onOpenChange, onMigrated }: Props) 
       const trimmedPath = path.trim().replace(/\/+$/, "") || "/";
       const body: MigrationBody = { path: trimmedPath };
       if (name.trim()) body.name = name.trim();
-      if (picked?.plotContent !== null && picked?.plotContent !== undefined) {
-        body.plotContent = picked.plotContent;
-      }
-      if (
-        picked?.knowledgeContent !== null &&
-        picked?.knowledgeContent !== undefined
-      ) {
+      if (picked.plotContent !== null) body.plotContent = picked.plotContent;
+      if (picked.knowledgeContent !== null) {
         body.knowledgeContent = picked.knowledgeContent;
       }
-      if (picked && picked.agents.length > 0) {
-        body.agents = picked.agents;
-      }
+      if (picked.agents.length > 0) body.agents = picked.agents;
       const r = await postJson<MigrationResult>(
         "/api/orchestrator/projects/migrate",
         body,
@@ -191,6 +169,14 @@ export function MigrateProjectDialog({ open, onOpenChange, onMigrated }: Props) 
     }
   };
 
+  const allRejected = [...picked.knowledgeRejected, ...picked.agentsRejected];
+  const showPreview =
+    picked.plotContent !== null ||
+    picked.knowledgeContent !== null ||
+    picked.agents.length > 0 ||
+    picked.registryIgnored ||
+    allRejected.length > 0;
+
   return (
     <Dialog
       open={open}
@@ -203,8 +189,8 @@ export function MigrateProjectDialog({ open, onOpenChange, onMigrated }: Props) 
         <DialogHeader>
           <DialogTitle>Migrate project from folder</DialogTitle>
           <DialogDescription>
-            Upserts PLOT.md, knowledge.md, and agents/*.md from a local folder
-            into SQLite. Browser reads files; backend writes under the path you
+            Upserts PLOT.md, knowledge.md, and agents/*.md into SQLite. Pick
+            the files individually below. Backend writes under the path you
             type. Never deletes.
           </DialogDescription>
         </DialogHeader>
@@ -250,56 +236,68 @@ export function MigrateProjectDialog({ open, onOpenChange, onMigrated }: Props) 
               />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Project root folder</label>
-              <input
+            <div className="grid gap-1">
+              <label className="text-sm font-medium">PLOT.md (single file)</label>
+              <Input
                 type="file"
-                multiple
-                /* @ts-expect-error non-standard */
-                webkitdirectory=""
-                onChange={(e) => void onPick(e)}
+                accept=".md,text/markdown"
+                onChange={(e) => void onPickPlot(e)}
                 disabled={busy}
-                className="block w-full text-xs"
               />
-              <p className="text-xs text-muted-foreground">
-                Reads PLOT.md, <code>.orchestrator/knowledge.md</code>, and{" "}
-                <code>.orchestrator/agents/&lt;slug&gt;.md</code> (lowercase
-                slug).
-              </p>
             </div>
 
-            {picked && (
+            <div className="grid gap-1">
+              <label className="text-sm font-medium">
+                knowledge.md (multi — REGISTRY.md is ignored)
+              </label>
+              <Input
+                type="file"
+                accept=".md,text/markdown"
+                multiple
+                onChange={(e) => void onPickKnowledge(e)}
+                disabled={busy}
+              />
+            </div>
+
+            <div className="grid gap-1">
+              <label className="text-sm font-medium">agents/*.md (multi)</label>
+              <Input
+                type="file"
+                accept=".md,text/markdown"
+                multiple
+                onChange={(e) => void onPickAgents(e)}
+                disabled={busy}
+              />
+            </div>
+
+            {showPreview && (
               <div className="rounded-md border p-3 text-sm space-y-1">
-                <div className="font-medium">
-                  Detected in {picked.rootName ?? "(unknown)"}/:
-                </div>
+                <div className="font-medium">Selected:</div>
                 <div>
                   PLOT.md:{" "}
                   {picked.plotContent !== null
                     ? `${picked.plotContent.length} chars`
-                    : "not found"}
+                    : "not selected"}
                 </div>
                 <div>
-                  .orchestrator/knowledge.md:{" "}
+                  knowledge.md:{" "}
                   {picked.knowledgeContent !== null
                     ? `${picked.knowledgeContent.length} chars`
-                    : "not found"}
+                    : "not selected"}
                 </div>
                 <div>
-                  .orchestrator/agents/: {picked.agents.length} file(s)
+                  agents: {picked.agents.length} file(s)
                   {picked.agents.length > 0 &&
                     ` — ${picked.agents.map((a) => a.slug).join(", ")}`}
                 </div>
-                {picked.rejected.length > 0 && (
+                {picked.registryIgnored && (
                   <div className="text-amber-600">
-                    Rejected (slug regex / case): {picked.rejected.join(", ")}
+                    REGISTRY.md ignored — not stored in DB.
                   </div>
                 )}
-                {picked.warnDotfileStrip && (
-                  <div className="text-amber-600 mt-2">
-                    Browser may have stripped <code>.orchestrator/</code>. Try
-                    Firefox, or paste the affected files manually via the MCP{" "}
-                    <code>project_migrate</code> tool.
+                {allRejected.length > 0 && (
+                  <div className="text-amber-600">
+                    Rejected (wrong filename / case): {allRejected.join(", ")}
                   </div>
                 )}
               </div>
