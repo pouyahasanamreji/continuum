@@ -1,11 +1,8 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const tmpDir = mkdtempSync(join(tmpdir(), 'swagger-e2e-'));
-const plotPath = join(tmpDir, 'PLOT.md');
-writeFileSync(plotPath, '# default plot template\n');
-process.env.ORCHESTRATOR_PLOT_PATH = plotPath;
 process.env.ORCHESTRATOR_DB_PATH = join(tmpDir, 'orchestrator.db');
 process.env.PANEL_REST_ENABLED = 'true';
 
