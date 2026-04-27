@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { MarkdownBody } from "./MarkdownBody";
 import { agentToMarkdown } from "@/lib/agent-markdown";
+import { useActiveProject } from "@/lib/use-active-project";
 import type { AgentFull } from "@/types/agent";
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function AgentDetailDialog({ agent, onOpenChange }: Props) {
+  const activeProject = useActiveProject();
   return (
     <Dialog open={agent !== null} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
@@ -30,10 +32,12 @@ export function AgentDetailDialog({ agent, onOpenChange }: Props) {
         </DialogHeader>
         {agent ? (
           <>
-            <p className="text-xs text-muted-foreground">
-              Project:{" "}
-              <span className="font-mono">{agent.projectPath}</span>
-            </p>
+            {activeProject ? (
+              <p className="text-xs text-muted-foreground">
+                Project:{" "}
+                <span className="font-mono">{activeProject}</span>
+              </p>
+            ) : null}
             <MarkdownBody text={agentToMarkdown(agent)} />
           </>
         ) : null}

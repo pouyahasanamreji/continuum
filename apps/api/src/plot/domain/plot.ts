@@ -1,5 +1,15 @@
+import { ApiProperty } from '@nestjs/swagger';
+
 export class Plot {
-  projectPath!: string;
+  @ApiProperty({ type: Number, example: 1 })
+  id!: number;
+
+  @ApiProperty({ type: Number, example: 1 })
+  projectId!: number;
+
+  @ApiProperty({ type: String })
   content!: string;
-  updatedAt!: number;
+
+  @ApiProperty({ type: Date })
+  updatedAt!: Date;
 }

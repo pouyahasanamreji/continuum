@@ -51,17 +51,25 @@ export const columns: ColumnDef<ProjectFull>[] = [
     id: "createdAt",
     header: sortHeader("Created"),
     cell: ({ row }) => (
-      <span className="text-xs">{dateFmt.format(row.original.createdAt)}</span>
+      <span className="text-xs">
+        {dateFmt.format(new Date(row.original.createdAt))}
+      </span>
     ),
-    sortingFn: (a, b) => a.original.createdAt - b.original.createdAt,
+    sortingFn: (a, b) =>
+      new Date(a.original.createdAt).getTime() -
+      new Date(b.original.createdAt).getTime(),
   },
   {
     accessorFn: (row) => row.updatedAt,
     id: "updatedAt",
     header: sortHeader("Updated"),
     cell: ({ row }) => (
-      <span className="text-xs">{dateFmt.format(row.original.updatedAt)}</span>
+      <span className="text-xs">
+        {dateFmt.format(new Date(row.original.updatedAt))}
+      </span>
     ),
-    sortingFn: (a, b) => a.original.updatedAt - b.original.updatedAt,
+    sortingFn: (a, b) =>
+      new Date(a.original.updatedAt).getTime() -
+      new Date(b.original.updatedAt).getTime(),
   },
 ];

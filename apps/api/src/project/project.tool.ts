@@ -5,8 +5,8 @@ import { ProjectService } from './project.service';
 import { ProjectServiceError } from '../common/errors/service-errors';
 import { createProjectDto } from './dto/create-project.dto';
 import type { CreateProjectDto } from './dto/create-project.dto';
-import { renameProjectDto } from './dto/rename-project.dto';
-import type { RenameProjectDto } from './dto/rename-project.dto';
+import { renameProjectDto } from './dto/update-project.dto';
+import type { RenameProjectInput } from './dto/update-project.dto';
 import { getProjectDto } from './dto/get-project.dto';
 import type { GetProjectDto } from './dto/get-project.dto';
 import { deleteProjectDto } from './dto/delete-project.dto';
@@ -38,7 +38,7 @@ export class ProjectTool {
   @Tool({
     name: 'project_list',
     description:
-      'List all projects (orchestrator project records). Returns array of {path, name, createdAt, updatedAt}.',
+      'List all projects (orchestrator project records). Returns array of {id, path, name, createdAt, updatedAt, deletedAt}.',
     parameters: z.object({}),
   })
   projectList() {
@@ -85,9 +85,9 @@ export class ProjectTool {
       'Rename an existing project. `path` identifies the project; `name` is the new display name.',
     parameters: renameProjectDto,
   })
-  projectRename(args: RenameProjectDto) {
+  projectRename(args: RenameProjectInput) {
     try {
-      return toolSuccess(this.projects.rename(args.path, args.name));
+      return toolSuccess(this.projects.update(args.path, { name: args.name }));
     } catch (e) {
       return toolError(e);
     }

@@ -7,7 +7,8 @@ import {
   AgentRepository,
   AgentUpdatePatch,
 } from './infrastructure/persistence/agent.repository';
-import { OrchestratorDbService } from '../database/orchestrator-db.service';
+import { ProjectRepository } from '../project/infrastructure/persistence/project.repository';
+import { IPaginationOptions } from '../utils/types/pagination-options';
 
 interface AgentCreateInput {
   slug: string;
@@ -32,35 +33,41 @@ interface AgentUpdateInput {
 export class AgentService {
   constructor(
     private readonly repo: AgentRepository,
-    private readonly dbs: OrchestratorDbService,
+    private readonly projectRepo: ProjectRepository,
   ) {}
 
-  private assertProjectExistsInline(projectPath: string): void {
-    const row = this.dbs.db
-      .prepare<
-        [string],
-        { _: number }
-      >('SELECT 1 AS _ FROM projects WHERE path = ?')
-      .get(projectPath);
-    if (!row) throw new AgentServiceError('project_not_found', projectPath);
+  private resolveProjectIdOrThrow(projectPath: string): number {
+    const id = this.projectRepo.findIdByPath(projectPath);
+    if (id === null) {
+      throw new AgentServiceError('project_not_found', projectPath);
+    }
+    return id;
   }
 
   list(projectPath: string): Agent[] {
-    this.assertProjectExistsInline(projectPath);
-    return this.repo.list(projectPath);
+    const projectId = this.resolveProjectIdOrThrow(projectPath);
+    return this.repo.findAll(projectId);
+  }
+
+  findManyWithPagination(
+    projectPath: string,
+    options: IPaginationOptions,
+  ): Agent[] {
+    const projectId = this.resolveProjectIdOrThrow(projectPath);
+    return this.repo.findManyWithPagination(projectId, options);
   }
 
   get(projectPath: string, slug: string): Agent | null {
-    this.assertProjectExistsInline(projectPath);
-    return this.repo.findBySlug(projectPath, slug);
+    const projectId = this.resolveProjectIdOrThrow(projectPath);
+    return this.repo.findByProjectIdAndSlug(projectId, slug);
   }
 
   create(projectPath: string, input: AgentCreateInput): Agent {
-    this.assertProjectExistsInline(projectPath);
+    const projectId = this.resolveProjectIdOrThrow(projectPath);
     if (!SLUG_RE.test(input.slug)) {
       throw new AgentServiceError('invalid_slug', input.slug);
     }
-    const result = this.repo.create(projectPath, {
+    const result = this.repo.create(projectId, {
       slug: input.slug,
       branch: input.branch,
       worktree: input.worktree,
@@ -78,8 +85,8 @@ export class AgentService {
   }
 
   update(projectPath: string, slug: string, patch: AgentUpdateInput): Agent {
-    this.assertProjectExistsInline(projectPath);
-    const existing = this.repo.findBySlug(projectPath, slug);
+    const projectId = this.resolveProjectIdOrThrow(projectPath);
+    const existing = this.repo.findByProjectIdAndSlug(projectId, slug);
     if (!existing) throw new AgentServiceError('not_found', slug);
 
     const now = Date.now();
@@ -141,8 +148,8 @@ export class AgentService {
 
     if (!touched) throw new AgentServiceError('no_change', slug);
 
-    this.repo.update(projectPath, slug, out);
-    const updated = this.repo.findBySlug(projectPath, slug);
+    this.repo.update(existing.id, out);
+    const updated = this.repo.findById(existing.id);
     if (!updated) throw new AgentServiceError('not_found', slug);
     return updated;
   }
@@ -152,6 +159,7 @@ export class AgentService {
     slug: string,
     payload: AgentMigrationPayload,
   ): void {
-    this.repo.upsertFromMigration(projectPath, slug, payload);
+    const projectId = this.resolveProjectIdOrThrow(projectPath);
+    this.repo.upsertFromMigration(projectId, slug, payload);
   }
 }

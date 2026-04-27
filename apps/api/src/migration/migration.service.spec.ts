@@ -16,6 +16,7 @@ class StubDb {
 function makeService(): {
   service: MigrationService;
   db: Database.Database;
+  idOf: (path: string) => number;
 } {
   const db = new Database(':memory:');
   db.pragma('journal_mode = WAL');
@@ -26,14 +27,30 @@ function makeService(): {
   const plot = {
     defaultTemplate: () => '# default plot template',
   } as unknown as PlotService;
-  const projects = new ProjectService(
-    new ProjectRelationalRepository(dbs),
-    plot,
+  const projectRepo = new ProjectRelationalRepository(dbs);
+  const projects = new ProjectService(projectRepo, plot);
+  const agents = new AgentService(
+    new AgentRelationalRepository(dbs),
+    projectRepo,
   );
-  const agents = new AgentService(new AgentRelationalRepository(dbs), dbs);
-  const service = new MigrationService(dbs, projects, plot, agents);
+  const service = new MigrationService(
+    dbs,
+    projects,
+    projectRepo,
+    plot,
+    agents,
+  );
 
-  return { service, db };
+  return {
+    service,
+    db,
+    idOf: (path: string) =>
+      (
+        db
+          .prepare('SELECT id FROM projects WHERE path = ?')
+          .get(path) as { id: number }
+      ).id,
+  };
 }
 
 const AGENT_DOC = `- **Status**: draft
@@ -62,7 +79,7 @@ notes
 
 describe('MigrationService', () => {
   it('creates project with all fields', () => {
-    const { service, db } = makeService();
+    const { service, db, idOf } = makeService();
     const r = service.migrate({
       path: '/tmp/p',
       name: 'P',
@@ -81,14 +98,15 @@ describe('MigrationService', () => {
       .get('/tmp/p') as { name: string };
     expect(proj.name).toBe('P');
 
+    const id = idOf('/tmp/p');
     const plot = db
-      .prepare('SELECT content FROM plots WHERE project_path = ?')
-      .get('/tmp/p') as { content: string };
+      .prepare('SELECT content FROM plots WHERE project_id = ?')
+      .get(id) as { content: string };
     expect(plot.content).toBe('# p plot');
   });
 
   it('plot history grows on update of existing project', () => {
-    const { service, db } = makeService();
+    const { service, db, idOf } = makeService();
     service.migrate({
       path: '/tmp/p',
       plotContent: 'v1',
@@ -98,9 +116,10 @@ describe('MigrationService', () => {
     expect(r.created).toBe(false);
     expect(r.plotUpdated).toBe(true);
 
+    const id = idOf('/tmp/p');
     const cnt = db
-      .prepare('SELECT count(*) AS c FROM plot_history WHERE project_path = ?')
-      .get('/tmp/p') as { c: number };
+      .prepare('SELECT count(*) AS c FROM plot_history WHERE project_id = ?')
+      .get(id) as { c: number };
     expect(cnt.c).toBe(2);
   });
 
@@ -147,16 +166,17 @@ describe('MigrationService', () => {
   });
 
   it('empty agents array does not delete existing agents', () => {
-    const { service, db } = makeService();
+    const { service, db, idOf } = makeService();
     service.migrate({
       path: '/tmp/p',
       agents: [{ slug: 'alpha', content: AGENT_DOC }],
     });
     const r = service.migrate({ path: '/tmp/p', agents: [] });
     expect(r.agentsUpserted).toBe(0);
+    const id = idOf('/tmp/p');
     const rows = db
-      .prepare('SELECT slug FROM agents WHERE project_path = ?')
-      .all('/tmp/p');
+      .prepare('SELECT slug FROM agents WHERE project_id = ?')
+      .all(id);
     expect(rows.length).toBe(1);
   });
 
@@ -168,7 +188,7 @@ describe('MigrationService', () => {
   });
 
   it('coerces unknown status to draft + warns', () => {
-    const { service, db } = makeService();
+    const { service, db, idOf } = makeService();
     const r = service.migrate({
       path: '/tmp/p',
       agents: [
@@ -182,9 +202,10 @@ describe('MigrationService', () => {
     expect(r.warnings.some((w) => w.includes('unrecognized status'))).toBe(
       true,
     );
+    const id = idOf('/tmp/p');
     const row = db
-      .prepare('SELECT status FROM agents WHERE project_path = ? AND slug = ?')
-      .get('/tmp/p', 'alpha') as { status: string };
+      .prepare('SELECT status FROM agents WHERE project_id = ? AND slug = ?')
+      .get(id, 'alpha') as { status: string };
     expect(row.status).toBe('draft');
   });
 

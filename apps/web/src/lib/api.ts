@@ -9,7 +9,8 @@ async function handle(r: Response): Promise<Response> {
       .clone()
       .json()
       .catch(() => ({}) as Record<string, unknown>);
-    if ((body as { reason?: string }).reason === "project_not_found") {
+    const errors = (body as { errors?: Record<string, string> }).errors;
+    if (errors?.project === "projectNotFound") {
       setActiveProject(null);
     }
   }

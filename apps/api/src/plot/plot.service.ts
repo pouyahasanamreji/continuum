@@ -2,6 +2,7 @@ import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { existsSync, readFileSync } from 'node:fs';
 import { applyPatch, parsePatch } from 'diff';
 import { OrchestratorDbService } from '../database/orchestrator-db.service';
+import { ProjectRepository } from '../project/infrastructure/persistence/project.repository';
 import { PlotServiceError } from '../common/errors/service-errors';
 
 const HEADER_FROM_RE = /^---\s+a\/PLOT\.md(\s|$)/m;
@@ -9,11 +10,11 @@ const HEADER_TO_RE = /^\+\+\+\s+b\/PLOT\.md(\s|$)/m;
 
 export interface PlotReadResult {
   content: string;
-  updatedAt: number;
+  updatedAt: Date;
 }
 
 export interface PlotUpdateResult {
-  updatedAt: number;
+  updatedAt: Date;
 }
 
 @Injectable()
@@ -22,7 +23,10 @@ export class PlotService implements OnModuleInit {
   private cachedTemplate: string | null = null;
   private loadedFrom: string | null = null;
 
-  constructor(private readonly dbService: OrchestratorDbService) {}
+  constructor(
+    private readonly dbService: OrchestratorDbService,
+    private readonly projectRepo: ProjectRepository,
+  ) {}
 
   onModuleInit(): void {
     this.cachedTemplate = this.loadTemplate();
@@ -51,42 +55,40 @@ export class PlotService implements OnModuleInit {
     return this.cachedTemplate ?? this.loadTemplate();
   }
 
-  private assertProjectExistsInline(projectPath: string): void {
-    const row = this.dbService.db
-      .prepare<
-        [string],
-        { _: number }
-      >('SELECT 1 AS _ FROM projects WHERE path = ?')
-      .get(projectPath);
-    if (!row) throw new PlotServiceError('project_not_found', projectPath);
+  private resolveProjectId(projectPath: string): number {
+    const id = this.projectRepo.findIdByPath(projectPath);
+    if (id === null) {
+      throw new PlotServiceError('project_not_found', projectPath);
+    }
+    return id;
   }
 
   getForProject(projectPath: string): PlotReadResult {
-    this.assertProjectExistsInline(projectPath);
+    const projectId = this.resolveProjectId(projectPath);
     const row = this.dbService.db
       .prepare<
-        [string],
+        [number],
         { content: string; updated_at: number }
-      >('SELECT content, updated_at FROM plots WHERE project_path = ?')
-      .get(projectPath);
+      >('SELECT content, updated_at FROM plots WHERE project_id = ?')
+      .get(projectId);
     if (!row) {
       const now = Date.now();
       const content = this.defaultTemplate();
       this.dbService.db
         .prepare(
-          'INSERT INTO plots (project_path, content, updated_at) VALUES (?, ?, ?)',
+          'INSERT INTO plots (project_id, content, updated_at) VALUES (?, ?, ?)',
         )
-        .run(projectPath, content, now);
-      return { content, updatedAt: now };
+        .run(projectId, content, now);
+      return { content, updatedAt: new Date(now) };
     }
-    return { content: row.content, updatedAt: row.updated_at };
+    return { content: row.content, updatedAt: new Date(row.updated_at) };
   }
 
   applyDiffForProject(
     projectPath: string,
     unifiedDiff: string,
   ): PlotUpdateResult {
-    this.assertProjectExistsInline(projectPath);
+    const projectId = this.resolveProjectId(projectPath);
     if (!HEADER_FROM_RE.test(unifiedDiff) || !HEADER_TO_RE.test(unifiedDiff)) {
       throw new PlotServiceError('invalid_diff_headers');
     }
@@ -118,17 +120,17 @@ export class PlotService implements OnModuleInit {
     const now = Date.now();
     const db = this.dbService.db;
     const tx = db.transaction(
-      (proj: string, content: string, diff: string, ts: number) => {
+      (pid: number, content: string, diff: string, ts: number) => {
         db.prepare(
-          'INSERT INTO plot_history (project_path, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
-        ).run(proj, content, diff, ts);
+          'INSERT INTO plot_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
+        ).run(pid, content, diff, ts);
         db.prepare(
-          'UPDATE plots SET content = ?, updated_at = ? WHERE project_path = ?',
-        ).run(content, ts, proj);
+          'UPDATE plots SET content = ?, updated_at = ? WHERE project_id = ?',
+        ).run(content, ts, pid);
       },
     );
-    tx.immediate(projectPath, updated, unifiedDiff, now);
+    tx.immediate(projectId, updated, unifiedDiff, now);
 
-    return { updatedAt: now };
+    return { updatedAt: new Date(now) };
   }
 }

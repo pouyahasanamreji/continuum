@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { applyPatch, parsePatch } from 'diff';
 import { OrchestratorDbService } from '../database/orchestrator-db.service';
+import { ProjectRepository } from '../project/infrastructure/persistence/project.repository';
 import { KnowledgeUpdateError } from '../common/errors/service-errors';
 
 const HEADER_FROM_RE = /^---\s+a\/knowledge\.md(\s|$)/m;
@@ -8,36 +9,39 @@ const HEADER_TO_RE = /^\+\+\+\s+b\/knowledge\.md(\s|$)/m;
 
 export interface KnowledgeReadResult {
   content: string;
-  updatedAt: number;
+  updatedAt: Date;
 }
 
 export interface KnowledgeUpdateResult {
-  updatedAt: number;
+  updatedAt: Date;
 }
 
 @Injectable()
 export class KnowledgeService {
-  constructor(private readonly dbService: OrchestratorDbService) {}
+  constructor(
+    private readonly dbService: OrchestratorDbService,
+    private readonly projectRepo: ProjectRepository,
+  ) {}
 
-  private assertProjectExistsInline(projectPath: string): void {
-    const row = this.dbService.db
-      .prepare<
-        [string],
-        { _: number }
-      >('SELECT 1 AS _ FROM projects WHERE path = ?')
-      .get(projectPath);
-    if (!row) throw new KnowledgeUpdateError('project_not_found', projectPath);
+  private resolveProjectId(projectPath: string): number {
+    const id = this.projectRepo.findIdByPath(projectPath);
+    if (id === null) {
+      throw new KnowledgeUpdateError('project_not_found', projectPath);
+    }
+    return id;
   }
 
   getAll(projectPath: string): KnowledgeReadResult | null {
-    this.assertProjectExistsInline(projectPath);
+    const projectId = this.resolveProjectId(projectPath);
     const row = this.dbService.db
       .prepare<
-        [string],
+        [number],
         { content: string; updated_at: number }
-      >('SELECT content, updated_at FROM knowledge WHERE project_path = ?')
-      .get(projectPath);
-    return row ? { content: row.content, updatedAt: row.updated_at } : null;
+      >('SELECT content, updated_at FROM knowledge WHERE project_id = ?')
+      .get(projectId);
+    return row
+      ? { content: row.content, updatedAt: new Date(row.updated_at) }
+      : null;
   }
 
   getSection(projectPath: string, title: string): string | null {
@@ -64,7 +68,7 @@ export class KnowledgeService {
   }
 
   applyDiff(projectPath: string, unifiedDiff: string): KnowledgeUpdateResult {
-    this.assertProjectExistsInline(projectPath);
+    const projectId = this.resolveProjectId(projectPath);
     if (!HEADER_FROM_RE.test(unifiedDiff) || !HEADER_TO_RE.test(unifiedDiff)) {
       throw new KnowledgeUpdateError('invalid_diff_headers');
     }
@@ -97,28 +101,28 @@ export class KnowledgeService {
     const now = Date.now();
     const db = this.dbService.db;
     const tx = db.transaction(
-      (proj: string, content: string, diff: string, ts: number) => {
+      (pid: number, content: string, diff: string, ts: number) => {
         db.prepare(
-          'INSERT INTO knowledge_history (project_path, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
-        ).run(proj, content, diff, ts);
+          'INSERT INTO knowledge_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
+        ).run(pid, content, diff, ts);
         db.prepare(
-          'UPDATE knowledge SET content = ?, updated_at = ? WHERE project_path = ?',
-        ).run(content, ts, proj);
+          'UPDATE knowledge SET content = ?, updated_at = ? WHERE project_id = ?',
+        ).run(content, ts, pid);
       },
     );
-    tx.immediate(projectPath, updated, unifiedDiff, now);
+    tx.immediate(projectId, updated, unifiedDiff, now);
 
-    return { updatedAt: now };
+    return { updatedAt: new Date(now) };
   }
 
   set(projectPath: string, content: string): void {
-    this.assertProjectExistsInline(projectPath);
+    const projectId = this.resolveProjectId(projectPath);
     const now = Date.now();
     this.dbService.db
       .prepare(
-        `INSERT INTO knowledge (project_path, content, updated_at) VALUES (?, ?, ?)
-         ON CONFLICT(project_path) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
+        `INSERT INTO knowledge (project_id, content, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(project_id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
       )
-      .run(projectPath, content, now);
+      .run(projectId, content, now);
   }
 }

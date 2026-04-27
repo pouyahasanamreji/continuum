@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { basename } from 'node:path';
 import { OrchestratorDbService } from '../database/orchestrator-db.service';
 import { ProjectService } from '../project/project.service';
+import { ProjectRepository } from '../project/infrastructure/persistence/project.repository';
 import { PlotService } from '../plot/plot.service';
 import { AgentService } from '../agent/agent.service';
 import { SLUG_RE } from '../common/slug';
@@ -34,6 +35,7 @@ export class MigrationService {
   constructor(
     private readonly dbs: OrchestratorDbService,
     private readonly projects: ProjectService,
+    private readonly projectRepo: ProjectRepository,
     private readonly plot: PlotService,
     private readonly agents: AgentService,
   ) {}
@@ -83,41 +85,39 @@ export class MigrationService {
     let agentsUpserted = 0;
 
     const tx = db.transaction(() => {
-      const existingProject = db
-        .prepare<
-          [string],
-          { _: number }
-        >('SELECT 1 AS _ FROM projects WHERE path = ?')
-        .get(projectPath);
+      let projectId = this.projectRepo.findIdByPath(projectPath);
 
-      if (!existingProject) {
+      if (projectId === null) {
         created = true;
+        const info = db
+          .prepare(
+            'INSERT INTO projects (path, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
+          )
+          .run(projectPath, name, now, now);
+        projectId = Number(info.lastInsertRowid);
         db.prepare(
-          'INSERT INTO projects (path, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
-        ).run(projectPath, name, now, now);
+          'INSERT INTO plots (project_id, content, updated_at) VALUES (?, ?, ?)',
+        ).run(projectId, this.plot.defaultTemplate(), now);
         db.prepare(
-          'INSERT INTO plots (project_path, content, updated_at) VALUES (?, ?, ?)',
-        ).run(projectPath, this.plot.defaultTemplate(), now);
-        db.prepare(
-          'INSERT INTO knowledge (project_path, content, updated_at) VALUES (?, ?, ?)',
-        ).run(projectPath, '', now);
+          'INSERT INTO knowledge (project_id, content, updated_at) VALUES (?, ?, ?)',
+        ).run(projectId, '', now);
       }
 
       if (input.plotContent !== undefined) {
         const current = db
           .prepare<
-            [string],
+            [number],
             { content: string }
-          >('SELECT content FROM plots WHERE project_path = ?')
-          .get(projectPath);
+          >('SELECT content FROM plots WHERE project_id = ?')
+          .get(projectId);
         const cur = current?.content ?? '';
         if (cur !== input.plotContent) {
           db.prepare(
-            'INSERT INTO plot_history (project_path, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
-          ).run(projectPath, input.plotContent, '[migration]', now);
+            'INSERT INTO plot_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
+          ).run(projectId, input.plotContent, '[migration]', now);
           db.prepare(
-            'UPDATE plots SET content = ?, updated_at = ? WHERE project_path = ?',
-          ).run(input.plotContent, now, projectPath);
+            'UPDATE plots SET content = ?, updated_at = ? WHERE project_id = ?',
+          ).run(input.plotContent, now, projectId);
           plotUpdated = true;
         }
       }
@@ -125,18 +125,18 @@ export class MigrationService {
       if (input.knowledgeContent !== undefined) {
         const current = db
           .prepare<
-            [string],
+            [number],
             { content: string }
-          >('SELECT content FROM knowledge WHERE project_path = ?')
-          .get(projectPath);
+          >('SELECT content FROM knowledge WHERE project_id = ?')
+          .get(projectId);
         const cur = current?.content ?? '';
         if (cur !== input.knowledgeContent) {
           db.prepare(
-            'INSERT INTO knowledge_history (project_path, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
-          ).run(projectPath, input.knowledgeContent, '[migration]', now);
+            'INSERT INTO knowledge_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
+          ).run(projectId, input.knowledgeContent, '[migration]', now);
           db.prepare(
-            'UPDATE knowledge SET content = ?, updated_at = ? WHERE project_path = ?',
-          ).run(input.knowledgeContent, now, projectPath);
+            'UPDATE knowledge SET content = ?, updated_at = ? WHERE project_id = ?',
+          ).run(input.knowledgeContent, now, projectId);
           knowledgeUpdated = true;
         }
       }

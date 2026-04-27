@@ -1,21 +1,66 @@
+import { ApiProperty } from '@nestjs/swagger';
+
 export type AgentStatus = 'draft' | 'active' | 'merged' | 'abandoned';
 
 export class Agent {
-  projectPath!: string;
+  @ApiProperty({ type: Number, example: 1 })
+  id!: number;
+
+  @ApiProperty({ type: Number, example: 1 })
+  projectId!: number;
+
+  @ApiProperty({ type: String, example: 'alpha' })
   slug!: string;
+
+  @ApiProperty({
+    type: String,
+    enum: ['draft', 'active', 'merged', 'abandoned'],
+    example: 'draft',
+  })
   status!: AgentStatus;
+
+  @ApiProperty({ type: String, example: 'feat/alpha' })
   branch!: string;
+
+  @ApiProperty({ type: String, example: '/tmp/wt' })
   worktree!: string;
+
+  @ApiProperty({ type: [String] })
   reservedPaths!: string[];
+
+  @ApiProperty({ type: String })
   request!: string;
+
+  @ApiProperty({ type: String })
   plan!: string;
+
+  @ApiProperty({ type: String })
   implPrompt!: string;
+
+  @ApiProperty({ type: String })
   coordinationBrief!: string;
+
+  @ApiProperty({ type: String })
   postMergeNotes!: string;
-  createdAt!: number;
-  dispatchedAt!: number | null;
-  updatedAt!: number;
-  mergedAt!: number | null;
+
+  @ApiProperty({ type: Date })
+  createdAt!: Date;
+
+  @ApiProperty({ type: Date, nullable: true })
+  dispatchedAt!: Date | null;
+
+  @ApiProperty({ type: Date })
+  updatedAt!: Date;
+
+  @ApiProperty({ type: Date, nullable: true })
+  mergedAt!: Date | null;
+
+  @ApiProperty({ type: String, nullable: true })
   mergedCommit!: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
   abandonedReason!: string | null;
+
+  @ApiProperty({ type: Date, nullable: true })
+  deletedAt!: Date | null;
 }

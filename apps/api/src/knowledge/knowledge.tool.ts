@@ -75,7 +75,7 @@ export class KnowledgeTool {
         content: [
           {
             type: 'text' as const,
-            text: `knowledge.md updated at ${new Date(result.updatedAt).toISOString()}`,
+            text: `knowledge.md updated at ${result.updatedAt.toISOString()}`,
           },
         ],
       };

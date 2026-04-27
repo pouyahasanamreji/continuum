@@ -7,9 +7,9 @@ import type { ListAgentDto } from './dto/list-agent.dto';
 import { getAgentDto } from './dto/get-agent.dto';
 import type { GetAgentDto } from './dto/get-agent.dto';
 import { createAgentDto } from './dto/create-agent.dto';
-import type { CreateAgentDto } from './dto/create-agent.dto';
+import type { CreateAgentInput } from './dto/create-agent.dto';
 import { updateAgentDto } from './dto/update-agent.dto';
-import type { UpdateAgentDto } from './dto/update-agent.dto';
+import type { UpdateAgentInput } from './dto/update-agent.dto';
 
 function toolError(err: unknown) {
   const msg =
@@ -82,7 +82,7 @@ export class AgentTool {
       'Create a new agent in draft state under `project`. Returns full record.',
     parameters: createAgentDto,
   })
-  agentCreate(args: CreateAgentDto) {
+  agentCreate(args: CreateAgentInput) {
     try {
       const { project, ...rest } = args;
       const created = this.agents.create(project, rest);
@@ -102,7 +102,7 @@ export class AgentTool {
       'Update an agent in `project`. Allowed transitions: draft→active, active→merged|abandoned. merged requires mergedCommit (len≥7). abandoned requires abandonedReason.',
     parameters: updateAgentDto,
   })
-  agentUpdate(args: UpdateAgentDto) {
+  agentUpdate(args: UpdateAgentInput) {
     try {
       const { project, slug, ...patch } = args;
       const updated = this.agents.update(project, slug, patch);
