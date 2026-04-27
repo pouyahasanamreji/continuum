@@ -36,8 +36,15 @@ export class KnowledgeService {
     const row = this.dbService.db
       .prepare<
         [number],
-        { content: string; updated_at: number }
-      >('SELECT content, updated_at FROM knowledge WHERE project_id = ?')
+        {
+          content: string;
+          created_at: number;
+          updated_at: number;
+          deleted_at: number | null;
+        }
+      >(
+        'SELECT content, created_at, updated_at, deleted_at FROM knowledge WHERE project_id = ? AND deleted_at IS NULL',
+      )
       .get(projectId);
     return row
       ? { content: row.content, updatedAt: new Date(row.updated_at) }
@@ -106,7 +113,7 @@ export class KnowledgeService {
           'INSERT INTO knowledge_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
         ).run(pid, content, diff, ts);
         db.prepare(
-          'UPDATE knowledge SET content = ?, updated_at = ? WHERE project_id = ?',
+          'UPDATE knowledge SET content = ?, updated_at = ? WHERE project_id = ? AND deleted_at IS NULL',
         ).run(content, ts, pid);
       },
     );
@@ -120,9 +127,9 @@ export class KnowledgeService {
     const now = Date.now();
     this.dbService.db
       .prepare(
-        `INSERT INTO knowledge (project_id, content, updated_at) VALUES (?, ?, ?)
+        `INSERT INTO knowledge (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)
          ON CONFLICT(project_id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
       )
-      .run(projectId, content, now);
+      .run(projectId, content, now, now);
   }
 }

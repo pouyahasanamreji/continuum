@@ -11,5 +11,11 @@ export class Knowledge {
   content!: string;
 
   @ApiProperty({ type: Date })
+  createdAt!: Date;
+
+  @ApiProperty({ type: Date })
   updatedAt!: Date;
+
+  @ApiProperty({ type: Date, nullable: true })
+  deletedAt!: Date | null;
 }

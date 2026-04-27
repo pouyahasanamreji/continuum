@@ -99,8 +99,8 @@ export class MigrationService {
           'INSERT INTO plots (project_id, content, updated_at) VALUES (?, ?, ?)',
         ).run(projectId, this.plot.defaultTemplate(), now);
         db.prepare(
-          'INSERT INTO knowledge (project_id, content, updated_at) VALUES (?, ?, ?)',
-        ).run(projectId, '', now);
+          'INSERT INTO knowledge (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
+        ).run(projectId, '', now, now);
       }
 
       if (input.plotContent !== undefined) {
@@ -127,7 +127,7 @@ export class MigrationService {
           .prepare<
             [number],
             { content: string }
-          >('SELECT content FROM knowledge WHERE project_id = ?')
+          >('SELECT content FROM knowledge WHERE project_id = ? AND deleted_at IS NULL')
           .get(projectId);
         const cur = current?.content ?? '';
         if (cur !== input.knowledgeContent) {
@@ -135,7 +135,7 @@ export class MigrationService {
             'INSERT INTO knowledge_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
           ).run(projectId, input.knowledgeContent, '[migration]', now);
           db.prepare(
-            'UPDATE knowledge SET content = ?, updated_at = ? WHERE project_id = ?',
+            'UPDATE knowledge SET content = ?, updated_at = ? WHERE project_id = ? AND deleted_at IS NULL',
           ).run(input.knowledgeContent, now, projectId);
           knowledgeUpdated = true;
         }
