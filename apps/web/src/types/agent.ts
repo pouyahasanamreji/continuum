@@ -1,7 +1,8 @@
 export type AgentStatus = "draft" | "active" | "merged" | "abandoned";
 
 export interface AgentFull {
-  projectPath: string;
+  id: number;
+  projectId: number;
   slug: string;
   status: AgentStatus;
   branch: string;
@@ -12,10 +13,11 @@ export interface AgentFull {
   implPrompt: string;
   coordinationBrief: string;
   postMergeNotes: string;
-  createdAt: number;
-  dispatchedAt: number | null;
-  updatedAt: number;
-  mergedAt: number | null;
+  createdAt: string;
+  dispatchedAt: string | null;
+  updatedAt: string;
+  mergedAt: string | null;
   mergedCommit: string | null;
   abandonedReason: string | null;
+  deletedAt: string | null;
 }

@@ -8,7 +8,7 @@ import { useActiveProject } from "@/lib/use-active-project";
 
 interface JsonShape {
   content: string;
-  updatedAt?: number;
+  updatedAt?: string;
 }
 
 interface Props {
@@ -16,8 +16,8 @@ interface Props {
   emptyMessage?: string;
 }
 
-function relTime(ts: number): string {
-  const diffMs = Date.now() - ts;
+function relTime(ts: string): string {
+  const diffMs = Date.now() - new Date(ts).getTime();
   const sec = Math.round(diffMs / 1000);
   if (sec < 60) return `${sec}s ago`;
   const min = Math.round(sec / 60);
@@ -36,7 +36,7 @@ export function MarkdownViewer({ endpoint, emptyMessage }: Props) {
     | { kind: "idle" }
     | { kind: "loading" }
     | { kind: "error"; message: string }
-    | { kind: "ready"; text: string; updatedAt?: number }
+    | { kind: "ready"; text: string; updatedAt?: string }
   >({ kind: "idle" });
 
   useEffect(() => {

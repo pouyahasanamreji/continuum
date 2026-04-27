@@ -1,7 +1,6 @@
 import type { AgentFull } from "@/types/agent";
 
-const fmt = (ts: number | null): string =>
-  ts === null ? "—" : new Date(ts).toISOString();
+const fmt = (ts: string | null): string => ts ?? "—";
 
 const orDash = (s: string | null): string => (s === null || s === "" ? "—" : s);
 

@@ -28,11 +28,11 @@ export function AgentsPage() {
     let cancelled = false;
     setAgents(null);
     setError(null);
-    getJson<AgentFull[]>(
-      withProject("/api/orchestrator/agents", activeProject),
+    getJson<{ data: AgentFull[]; hasNextPage: boolean }>(
+      withProject("/api/orchestrator/agents?limit=50", activeProject),
     )
-      .then((data) => {
-        if (!cancelled) setAgents(data);
+      .then((res) => {
+        if (!cancelled) setAgents(res.data);
       })
       .catch((err: unknown) => {
         if (!cancelled)

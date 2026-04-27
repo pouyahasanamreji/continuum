@@ -112,8 +112,12 @@ export const columns: ColumnDef<AgentFull>[] = [
     id: "updatedAt",
     header: sortHeader("Updated"),
     cell: ({ row }) => (
-      <span className="text-xs">{dateFmt.format(row.original.updatedAt)}</span>
+      <span className="text-xs">
+        {dateFmt.format(new Date(row.original.updatedAt))}
+      </span>
     ),
-    sortingFn: (a, b) => a.original.updatedAt - b.original.updatedAt,
+    sortingFn: (a, b) =>
+      new Date(a.original.updatedAt).getTime() -
+      new Date(b.original.updatedAt).getTime(),
   },
 ];
