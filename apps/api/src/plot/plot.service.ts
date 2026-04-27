@@ -2,6 +2,7 @@ import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { existsSync, readFileSync } from 'node:fs';
 import { applyPatch, parsePatch } from 'diff';
 import { OrchestratorDbService } from '../database/orchestrator-db.service';
+import { ProjectRepository } from '../project/infrastructure/persistence/project.repository';
 import { PlotServiceError } from '../common/errors/service-errors';
 
 const HEADER_FROM_RE = /^---\s+a\/PLOT\.md(\s|$)/m;
@@ -9,11 +10,11 @@ const HEADER_TO_RE = /^\+\+\+\s+b\/PLOT\.md(\s|$)/m;
 
 export interface PlotReadResult {
   content: string;
-  updatedAt: number;
+  updatedAt: Date;
 }
 
 export interface PlotUpdateResult {
-  updatedAt: number;
+  updatedAt: Date;
 }
 
 @Injectable()
@@ -22,7 +23,10 @@ export class PlotService implements OnModuleInit {
   private cachedTemplate: string | null = null;
   private loadedFrom: string | null = null;
 
-  constructor(private readonly dbService: OrchestratorDbService) {}
+  constructor(
+    private readonly dbService: OrchestratorDbService,
+    private readonly projectRepo: ProjectRepository,
+  ) {}
 
   onModuleInit(): void {
     this.cachedTemplate = this.loadTemplate();
@@ -51,21 +55,16 @@ export class PlotService implements OnModuleInit {
     return this.cachedTemplate ?? this.loadTemplate();
   }
 
-  private resolveProjectIdInline(projectPath: string): number {
-    const row = this.dbService.db
-      .prepare<
-        [string],
-        { id: number }
-      >(
-        'SELECT id FROM projects WHERE path = ? AND deleted_at IS NULL',
-      )
-      .get(projectPath);
-    if (!row) throw new PlotServiceError('project_not_found', projectPath);
-    return row.id;
+  private resolveProjectId(projectPath: string): number {
+    const id = this.projectRepo.findIdByPath(projectPath);
+    if (id === null) {
+      throw new PlotServiceError('project_not_found', projectPath);
+    }
+    return id;
   }
 
   getForProject(projectPath: string): PlotReadResult {
-    const projectId = this.resolveProjectIdInline(projectPath);
+    const projectId = this.resolveProjectId(projectPath);
     const row = this.dbService.db
       .prepare<
         [number],
@@ -80,16 +79,16 @@ export class PlotService implements OnModuleInit {
           'INSERT INTO plots (project_id, content, updated_at) VALUES (?, ?, ?)',
         )
         .run(projectId, content, now);
-      return { content, updatedAt: now };
+      return { content, updatedAt: new Date(now) };
     }
-    return { content: row.content, updatedAt: row.updated_at };
+    return { content: row.content, updatedAt: new Date(row.updated_at) };
   }
 
   applyDiffForProject(
     projectPath: string,
     unifiedDiff: string,
   ): PlotUpdateResult {
-    const projectId = this.resolveProjectIdInline(projectPath);
+    const projectId = this.resolveProjectId(projectPath);
     if (!HEADER_FROM_RE.test(unifiedDiff) || !HEADER_TO_RE.test(unifiedDiff)) {
       throw new PlotServiceError('invalid_diff_headers');
     }
@@ -132,6 +131,6 @@ export class PlotService implements OnModuleInit {
     );
     tx.immediate(projectId, updated, unifiedDiff, now);
 
-    return { updatedAt: now };
+    return { updatedAt: new Date(now) };
   }
 }

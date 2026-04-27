@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { applyPatch, parsePatch } from 'diff';
 import { OrchestratorDbService } from '../database/orchestrator-db.service';
+import { ProjectRepository } from '../project/infrastructure/persistence/project.repository';
 import { KnowledgeUpdateError } from '../common/errors/service-errors';
 
 const HEADER_FROM_RE = /^---\s+a\/knowledge\.md(\s|$)/m;
@@ -8,39 +9,39 @@ const HEADER_TO_RE = /^\+\+\+\s+b\/knowledge\.md(\s|$)/m;
 
 export interface KnowledgeReadResult {
   content: string;
-  updatedAt: number;
+  updatedAt: Date;
 }
 
 export interface KnowledgeUpdateResult {
-  updatedAt: number;
+  updatedAt: Date;
 }
 
 @Injectable()
 export class KnowledgeService {
-  constructor(private readonly dbService: OrchestratorDbService) {}
+  constructor(
+    private readonly dbService: OrchestratorDbService,
+    private readonly projectRepo: ProjectRepository,
+  ) {}
 
-  private resolveProjectIdInline(projectPath: string): number {
-    const row = this.dbService.db
-      .prepare<
-        [string],
-        { id: number }
-      >(
-        'SELECT id FROM projects WHERE path = ? AND deleted_at IS NULL',
-      )
-      .get(projectPath);
-    if (!row) throw new KnowledgeUpdateError('project_not_found', projectPath);
-    return row.id;
+  private resolveProjectId(projectPath: string): number {
+    const id = this.projectRepo.findIdByPath(projectPath);
+    if (id === null) {
+      throw new KnowledgeUpdateError('project_not_found', projectPath);
+    }
+    return id;
   }
 
   getAll(projectPath: string): KnowledgeReadResult | null {
-    const projectId = this.resolveProjectIdInline(projectPath);
+    const projectId = this.resolveProjectId(projectPath);
     const row = this.dbService.db
       .prepare<
         [number],
         { content: string; updated_at: number }
       >('SELECT content, updated_at FROM knowledge WHERE project_id = ?')
       .get(projectId);
-    return row ? { content: row.content, updatedAt: row.updated_at } : null;
+    return row
+      ? { content: row.content, updatedAt: new Date(row.updated_at) }
+      : null;
   }
 
   getSection(projectPath: string, title: string): string | null {
@@ -67,7 +68,7 @@ export class KnowledgeService {
   }
 
   applyDiff(projectPath: string, unifiedDiff: string): KnowledgeUpdateResult {
-    const projectId = this.resolveProjectIdInline(projectPath);
+    const projectId = this.resolveProjectId(projectPath);
     if (!HEADER_FROM_RE.test(unifiedDiff) || !HEADER_TO_RE.test(unifiedDiff)) {
       throw new KnowledgeUpdateError('invalid_diff_headers');
     }
@@ -111,11 +112,11 @@ export class KnowledgeService {
     );
     tx.immediate(projectId, updated, unifiedDiff, now);
 
-    return { updatedAt: now };
+    return { updatedAt: new Date(now) };
   }
 
   set(projectPath: string, content: string): void {
-    const projectId = this.resolveProjectIdInline(projectPath);
+    const projectId = this.resolveProjectId(projectPath);
     const now = Date.now();
     this.dbService.db
       .prepare(

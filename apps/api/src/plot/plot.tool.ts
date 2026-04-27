@@ -52,7 +52,7 @@ export class PlotTool {
         content: [
           {
             type: 'text' as const,
-            text: `PLOT.md updated at ${new Date(result.updatedAt).toISOString()}`,
+            text: `PLOT.md updated at ${result.updatedAt.toISOString()}`,
           },
         ],
       };

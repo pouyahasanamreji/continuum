@@ -5,14 +5,20 @@ import {
   NotFoundException,
   Query,
 } from '@nestjs/common';
+import { ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { KnowledgeService } from './knowledge.service';
+import { Knowledge } from './domain/knowledge';
 import { mapServiceError } from '../common/errors/map-service-error';
 
+@ApiTags('Knowledge')
 @Controller('api/orchestrator')
 export class KnowledgeController {
   constructor(private readonly knowledge: KnowledgeService) {}
 
   @Get('knowledge')
+  @ApiQuery({ name: 'project', type: String, required: true })
+  @ApiQuery({ name: 'section', type: String, required: false })
+  @ApiOkResponse({ type: Knowledge })
   getKnowledge(
     @Query('project') project?: string,
     @Query('section') section?: string,
