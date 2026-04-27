@@ -83,6 +83,9 @@ export function mapServiceError(err: unknown): never {
       case 'hunk_mismatch':
         unprocessable('plot', 'hunkMismatch');
         break;
+      case 'no_current_content':
+        unprocessable('plot', 'noCurrentContent');
+        break;
     }
   }
 

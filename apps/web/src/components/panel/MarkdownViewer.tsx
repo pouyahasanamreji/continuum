@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { API_BASE, withProject } from "@/lib/api";
 import { useActiveProject } from "@/lib/use-active-project";
 
-// Subset of api/Knowledge — additional fields (id, projectId, createdAt, deletedAt) are ignored by the viewer.
+// Subset of api/Plot|api/Knowledge — additional fields (id, projectId, createdAt, deletedAt) are ignored by the viewer.
 interface JsonShape {
   content: string;
   updatedAt?: string;
@@ -31,7 +31,6 @@ function relTime(ts: string): string {
 
 export function MarkdownViewer({ endpoint, emptyMessage }: Props) {
   const activeProject = useActiveProject();
-  const format: "text" | "json" = endpoint === "plot" ? "text" : "json";
 
   const [state, setState] = useState<
     | { kind: "idle" }
@@ -52,18 +51,13 @@ export function MarkdownViewer({ endpoint, emptyMessage }: Props) {
       try {
         const r = await fetch(`${API_BASE}${path}`, { credentials: "omit" });
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-        if (format === "text") {
-          const text = await r.text();
-          if (!cancelled) setState({ kind: "ready", text });
-        } else {
-          const json = (await r.json()) as JsonShape;
-          if (!cancelled)
-            setState({
-              kind: "ready",
-              text: json.content,
-              updatedAt: json.updatedAt,
-            });
-        }
+        const json = (await r.json()) as JsonShape;
+        if (!cancelled)
+          setState({
+            kind: "ready",
+            text: json.content,
+            updatedAt: json.updatedAt,
+          });
       } catch (err) {
         if (!cancelled)
           setState({
@@ -76,7 +70,7 @@ export function MarkdownViewer({ endpoint, emptyMessage }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [activeProject, endpoint, format]);
+  }, [activeProject, endpoint]);
 
   if (!activeProject) {
     return (

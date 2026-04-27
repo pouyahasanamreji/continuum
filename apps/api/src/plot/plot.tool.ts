@@ -32,8 +32,14 @@ export class PlotTool {
   })
   getPlot(args: GetPlotDto) {
     try {
-      const result = this.plot.getForProject(args.project);
-      return { content: [{ type: 'text' as const, text: result.content }] };
+      const found = this.plot.findOne(args.project);
+      if (!found) {
+        return {
+          content: [{ type: 'text' as const, text: 'PLOT.md is empty.' }],
+          isError: true,
+        };
+      }
+      return { content: [{ type: 'text' as const, text: found.content }] };
     } catch (e) {
       return toolError(e);
     }
@@ -47,7 +53,10 @@ export class PlotTool {
   })
   plotUpdate(args: UpdatePlotInput) {
     try {
-      const result = this.plot.applyDiffForProject(args.project, args.diff);
+      const result = this.plot.update({
+        project: args.project,
+        diff: args.diff,
+      });
       return {
         content: [
           {
