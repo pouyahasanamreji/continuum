@@ -12,7 +12,6 @@
     "check-types": "tsc --noEmit",
     "test": "jest",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "seed": "tsx scripts/seed-orchestrator-state.ts",
     "mcp:dev": "ORCHESTRATOR_DB_PATH=./.local-data/orchestrator.db nest start --watch"
   },
   "dependencies": {
@@ -56,7 +55,6 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "tsx": "^4.19.2",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.50.0"
   },
