@@ -1,9 +1,9 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { existsSync, readFileSync } from 'node:fs';
 import { applyPatch, parsePatch } from 'diff';
-import { OrchestratorDbService } from '../database/orchestrator-db.service';
 import { ProjectRepository } from '../project/infrastructure/persistence/project.repository';
 import { PlotServiceError } from '../common/errors/service-errors';
+import { PlotRepository } from './infrastructure/persistence/plot.repository';
 
 const HEADER_FROM_RE = /^---\s+a\/PLOT\.md(\s|$)/m;
 const HEADER_TO_RE = /^\+\+\+\s+b\/PLOT\.md(\s|$)/m;
@@ -24,7 +24,7 @@ export class PlotService implements OnModuleInit {
   private loadedFrom: string | null = null;
 
   constructor(
-    private readonly dbService: OrchestratorDbService,
+    private readonly repo: PlotRepository,
     private readonly projectRepo: ProjectRepository,
   ) {}
 
@@ -65,32 +65,16 @@ export class PlotService implements OnModuleInit {
 
   getForProject(projectPath: string): PlotReadResult {
     const projectId = this.resolveProjectId(projectPath);
-    const row = this.dbService.db
-      .prepare<
-        [number],
-        {
-          id: number;
-          project_id: number;
-          content: string;
-          created_at: number;
-          updated_at: number;
-          deleted_at: number | null;
-        }
-      >(
-        'SELECT id, project_id, content, created_at, updated_at, deleted_at FROM plots WHERE project_id = ? AND deleted_at IS NULL',
-      )
-      .get(projectId);
-    if (!row) {
+    let plot = this.repo.findByProjectId(projectId);
+    if (!plot) {
       const now = Date.now();
-      const content = this.defaultTemplate();
-      this.dbService.db
-        .prepare(
-          'INSERT INTO plots (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
-        )
-        .run(projectId, content, now, now);
-      return { content, updatedAt: new Date(now) };
+      this.repo.upsert(projectId, this.defaultTemplate(), now);
+      plot = this.repo.findByProjectId(projectId);
+      if (!plot) {
+        throw new Error(`plot lazy-create failed for project_id=${projectId}`);
+      }
     }
-    return { content: row.content, updatedAt: new Date(row.updated_at) };
+    return { content: plot.content, updatedAt: plot.updatedAt };
   }
 
   applyDiffForProject(
@@ -127,18 +111,11 @@ export class PlotService implements OnModuleInit {
     }
 
     const now = Date.now();
-    const db = this.dbService.db;
-    const tx = db.transaction(
-      (pid: number, content: string, diff: string, ts: number) => {
-        db.prepare(
-          'INSERT INTO plot_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
-        ).run(pid, content, diff, ts);
-        db.prepare(
-          'UPDATE plots SET content = ?, updated_at = ? WHERE project_id = ? AND deleted_at IS NULL',
-        ).run(content, ts, pid);
-      },
-    );
-    tx.immediate(projectId, updated, unifiedDiff, now);
+    this.repo.applyDiff(projectId, {
+      unifiedDiff,
+      newContent: updated,
+      now,
+    });
 
     return { updatedAt: new Date(now) };
   }
