@@ -4,9 +4,6 @@
 // projects through that path (never via raw INSERT INTO projects)
 // so the plot row is real and PlotService.findOne returns a Plot.
 import Database from 'better-sqlite3';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { OrchestratorDbService } from '../database/orchestrator-db.service';
 import { migrate } from '../database/schema';
 import { PlotService } from './plot.service';
@@ -24,11 +21,6 @@ function makeService(): {
   projectRepo: ProjectRelationalRepository;
   createProject: (path: string, plotContent?: string) => number;
 } {
-  const tmp = mkdtempSync(join(tmpdir(), 'plot-svc-spec-'));
-  const plotPath = join(tmp, 'PLOT.md');
-  writeFileSync(plotPath, '# default plot template\n');
-  process.env.ORCHESTRATOR_PLOT_PATH = plotPath;
-
   const db = new Database(':memory:');
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
@@ -38,7 +30,6 @@ function makeService(): {
   const projectRepo = new ProjectRelationalRepository(dbs);
   const plotRepo = new PlotRelationalRepository(dbs);
   const service = new PlotService(plotRepo, projectRepo);
-  service.onModuleInit();
 
   return {
     service,
