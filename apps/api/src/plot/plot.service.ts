@@ -1,51 +1,24 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { existsSync, readFileSync } from 'node:fs';
+import { Injectable } from '@nestjs/common';
 import { applyPatch, parsePatch } from 'diff';
 import { Plot } from './domain/plot';
 import { ProjectRepository } from '../project/infrastructure/persistence/project.repository';
 import { PlotServiceError } from '../common/errors/service-errors';
 import { PlotRepository } from './infrastructure/persistence/plot.repository';
 import { UpdatePlotDto } from './dto/update-plot.dto';
+import { DEFAULT_PLOT_TEMPLATE } from './default-template';
 
 const HEADER_FROM_RE = /^---\s+a\/PLOT\.md(\s|$)/m;
 const HEADER_TO_RE = /^\+\+\+\s+b\/PLOT\.md(\s|$)/m;
 
 @Injectable()
-export class PlotService implements OnModuleInit {
-  private readonly logger = new Logger(PlotService.name);
-  private cachedTemplate: string | null = null;
-  private loadedFrom: string | null = null;
-
+export class PlotService {
   constructor(
     private readonly repo: PlotRepository,
     private readonly projectRepo: ProjectRepository,
   ) {}
 
-  onModuleInit(): void {
-    this.cachedTemplate = this.loadTemplate();
-    this.logger.log(
-      `PlotService template loaded ${this.cachedTemplate.length} chars from ${this.loadedFrom}`,
-    );
-  }
-
-  private loadTemplate(): string {
-    const envPath = process.env.ORCHESTRATOR_PLOT_PATH;
-    if (!envPath) {
-      throw new Error(
-        'ORCHESTRATOR_PLOT_PATH is required (canonical PLOT.md path)',
-      );
-    }
-    if (!existsSync(envPath)) {
-      throw new Error(
-        `ORCHESTRATOR_PLOT_PATH points to a missing file: ${envPath}`,
-      );
-    }
-    this.loadedFrom = envPath;
-    return readFileSync(envPath, 'utf8');
-  }
-
   defaultTemplate(): string {
-    return this.cachedTemplate ?? this.loadTemplate();
+    return DEFAULT_PLOT_TEMPLATE;
   }
 
   private resolveProjectIdOrThrow(projectPath: string): number {
