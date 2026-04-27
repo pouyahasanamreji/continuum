@@ -64,8 +64,8 @@ export class ProjectController {
       const found = this.projects.get(path);
       if (!found) {
         throw new NotFoundException({
-          reason: 'project_not_found',
-          detail: path,
+          status: 404,
+          errors: { project: 'projectNotFound' },
         });
       }
       return found;

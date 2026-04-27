@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
@@ -10,6 +9,7 @@ import {
   Patch,
   Post,
   Query,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
@@ -30,6 +30,13 @@ import {
 import { infinityPagination } from '../utils/infinity-pagination';
 import { mapServiceError } from '../common/errors/map-service-error';
 
+function missingProject(): never {
+  throw new UnprocessableEntityException({
+    status: 422,
+    errors: { project: 'missingProjectQuery' },
+  });
+}
+
 @ApiTags('Agents')
 @Controller('api/orchestrator')
 export class AgentController {
@@ -41,9 +48,7 @@ export class AgentController {
   listAgents(
     @Query() query: QueryAgentDto,
   ): InfinityPaginationResponseDto<Agent> {
-    if (!query.project) {
-      throw new BadRequestException({ reason: 'missing_project_query' });
-    }
+    if (!query.project) missingProject();
     try {
       const page = query?.page ?? 1;
       const limit = Math.min(query?.limit ?? 10, 50);
@@ -65,12 +70,15 @@ export class AgentController {
     @Param('slug') slug: string,
     @Query('project') project?: string,
   ): Agent {
-    if (!project) {
-      throw new BadRequestException({ reason: 'missing_project_query' });
-    }
+    if (!project) missingProject();
     try {
       const found = this.agents.get(project, slug);
-      if (!found) throw new NotFoundException(`Agent "${slug}" not found`);
+      if (!found) {
+        throw new NotFoundException({
+          status: 404,
+          errors: { agent: 'agentNotFound' },
+        });
+      }
       return found;
     } catch (e) {
       if (e instanceof NotFoundException) throw e;
@@ -98,9 +106,7 @@ export class AgentController {
     @Param('slug') slug: string,
     @Body() body: UpdateAgentDto,
   ): Agent {
-    if (!body.project) {
-      throw new BadRequestException({ reason: 'missing_project_body' });
-    }
+    if (!body.project) missingProject();
     try {
       const { project, ...patch } = body;
       return this.agents.update(project, slug, patch);

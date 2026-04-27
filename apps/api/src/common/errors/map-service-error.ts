@@ -1,7 +1,7 @@
 import {
-  BadRequestException,
   ConflictException,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import {
   AgentServiceError,
@@ -10,36 +10,113 @@ import {
   ProjectServiceError,
 } from './service-errors';
 
+function unprocessable(field: string, code: string): never {
+  throw new UnprocessableEntityException({
+    status: 422,
+    errors: { [field]: code },
+  });
+}
+
+function notFound(field: string, code: string): never {
+  throw new NotFoundException({
+    status: 404,
+    errors: { [field]: code },
+  });
+}
+
+function conflict(field: string, code: string): never {
+  throw new ConflictException({
+    status: 409,
+    errors: { [field]: code },
+  });
+}
+
 export function mapServiceError(err: unknown): never {
   if (err instanceof ProjectServiceError) {
-    if (err.reason === 'project_not_found') {
-      throw new NotFoundException({ reason: err.reason, detail: err.detail });
+    switch (err.reason) {
+      case 'project_not_found':
+        notFound('project', 'projectNotFound');
+        break;
+      case 'project_exists':
+        conflict('path', 'projectAlreadyExists');
+        break;
+      case 'invalid_path':
+        unprocessable('path', 'invalidPath');
+        break;
+      case 'invalid_name':
+        unprocessable('name', 'invalidName');
+        break;
     }
-    if (err.reason === 'project_exists') {
-      throw new ConflictException({ reason: err.reason, detail: err.detail });
-    }
-    throw new BadRequestException({ reason: err.reason, detail: err.detail });
   }
+
   if (err instanceof KnowledgeUpdateError) {
-    if (err.reason === 'project_not_found') {
-      throw new NotFoundException({ reason: err.reason, detail: err.detail });
+    switch (err.reason) {
+      case 'project_not_found':
+        notFound('project', 'projectNotFound');
+        break;
+      case 'invalid_diff_headers':
+        unprocessable('diff', 'invalidDiffHeaders');
+        break;
+      case 'parse_failed':
+        unprocessable('diff', 'parseFailed');
+        break;
+      case 'hunk_mismatch':
+        unprocessable('diff', 'hunkMismatch');
+        break;
+      case 'no_current_content':
+        unprocessable('knowledge', 'noCurrentContent');
+        break;
     }
-    throw new BadRequestException({ reason: err.reason, detail: err.detail });
   }
+
   if (err instanceof PlotServiceError) {
-    if (err.reason === 'project_not_found') {
-      throw new NotFoundException({ reason: err.reason, detail: err.detail });
+    switch (err.reason) {
+      case 'project_not_found':
+        notFound('project', 'projectNotFound');
+        break;
+      case 'invalid_diff_headers':
+        unprocessable('plot', 'invalidDiffHeaders');
+        break;
+      case 'parse_failed':
+        unprocessable('plot', 'parseFailed');
+        break;
+      case 'hunk_mismatch':
+        unprocessable('plot', 'hunkMismatch');
+        break;
     }
-    throw new BadRequestException({ reason: err.reason, detail: err.detail });
   }
+
   if (err instanceof AgentServiceError) {
-    if (err.reason === 'project_not_found' || err.reason === 'not_found') {
-      throw new NotFoundException({ reason: err.reason, detail: err.detail });
+    switch (err.reason) {
+      case 'not_found':
+        notFound('agent', 'agentNotFound');
+        break;
+      case 'project_not_found':
+        notFound('project', 'projectNotFound');
+        break;
+      case 'slug_conflict':
+        conflict('slug', 'slugConflict');
+        break;
+      case 'invalid_slug':
+        unprocessable('slug', 'invalidSlug');
+        break;
+      case 'invalid_transition':
+        unprocessable('status', 'invalidTransition');
+        break;
+      case 'missing_merged_commit':
+        unprocessable('mergedCommit', 'missingMergedCommit');
+        break;
+      case 'invalid_merged_commit':
+        unprocessable('mergedCommit', 'invalidMergedCommit');
+        break;
+      case 'missing_abandoned_reason':
+        unprocessable('abandonedReason', 'missingAbandonedReason');
+        break;
+      case 'no_change':
+        unprocessable('agent', 'noChange');
+        break;
     }
-    if (err.reason === 'slug_conflict') {
-      throw new ConflictException({ reason: err.reason, detail: err.detail });
-    }
-    throw new BadRequestException({ reason: err.reason, detail: err.detail });
   }
+
   throw err;
 }

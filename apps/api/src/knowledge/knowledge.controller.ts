@@ -1,9 +1,9 @@
 import {
-  BadRequestException,
   Controller,
   Get,
   NotFoundException,
   Query,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { KnowledgeService } from './knowledge.service';
@@ -24,17 +24,27 @@ export class KnowledgeController {
     @Query('section') section?: string,
   ) {
     if (!project) {
-      throw new BadRequestException({ reason: 'missing_project_query' });
+      throw new UnprocessableEntityException({
+        status: 422,
+        errors: { project: 'missingProjectQuery' },
+      });
     }
     try {
       if (section) {
         const text = this.knowledge.getSection(project, section);
         if (text === null)
-          throw new NotFoundException(`Section "${section}" not found`);
+          throw new NotFoundException({
+            status: 404,
+            errors: { section: 'sectionNotFound' },
+          });
         return { content: text, section };
       }
       const all = this.knowledge.getAll(project);
-      if (!all) throw new NotFoundException('Knowledge document is empty');
+      if (!all)
+        throw new NotFoundException({
+          status: 404,
+          errors: { knowledge: 'knowledgeNotFound' },
+        });
       return all;
     } catch (e) {
       if (e instanceof NotFoundException) throw e;

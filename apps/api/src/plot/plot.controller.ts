@@ -1,9 +1,9 @@
 import {
-  BadRequestException,
   Controller,
   Get,
   Header,
   Query,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { PlotService } from './plot.service';
@@ -21,7 +21,10 @@ export class PlotController {
   @ApiOkResponse({ description: 'Plot markdown body for the project.' })
   getPlot(@Query('project') project?: string): string {
     if (!project) {
-      throw new BadRequestException({ reason: 'missing_project_query' });
+      throw new UnprocessableEntityException({
+        status: 422,
+        errors: { project: 'missingProjectQuery' },
+      });
     }
     try {
       return this.plot.getForProject(project).content;
