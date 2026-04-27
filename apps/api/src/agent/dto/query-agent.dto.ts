@@ -7,8 +7,12 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
+import { z } from 'zod';
 import { Agent } from '../domain/agent';
 import { AgentStatusEnum } from '../../agent-statuses/agent-statuses.enum';
+
+export const listAgentDto = z.object({ project: z.string() });
+export type ListAgentDto = z.infer<typeof listAgentDto>;
 
 export class FilterAgentDto {
   @ApiPropertyOptional({
