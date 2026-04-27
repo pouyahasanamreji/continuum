@@ -22,9 +22,7 @@ export class ProjectRelationalRepository extends ProjectRepository {
       .prepare<
         unknown[],
         ProjectEntity
-      >(
-        'SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC',
-      )
+      >('SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC')
       .all();
     return rows.map((r) => ProjectMapper.toDomain(r));
   }
@@ -34,9 +32,7 @@ export class ProjectRelationalRepository extends ProjectRepository {
       .prepare<
         [number, number],
         ProjectEntity
-      >(
-        'SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?',
-      )
+      >('SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?')
       .all(options.limit, (options.page - 1) * options.limit);
     return rows.map((r) => ProjectMapper.toDomain(r));
   }
@@ -91,8 +87,8 @@ export class ProjectRelationalRepository extends ProjectRepository {
         throw e;
       }
       db.prepare(
-        'INSERT INTO plots (project_id, content, updated_at) VALUES (?, ?, ?)',
-      ).run(projectId, payload.plotContent, payload.now);
+        'INSERT INTO plots (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
+      ).run(projectId, payload.plotContent, payload.now, payload.now);
       db.prepare(
         'INSERT INTO knowledge (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
       ).run(projectId, payload.knowledgeContent, payload.now, payload.now);
@@ -114,7 +110,9 @@ export class ProjectRelationalRepository extends ProjectRepository {
       params.push(payload.name);
     }
     const now =
-      payload.updatedAt instanceof Date ? payload.updatedAt.getTime() : Date.now();
+      payload.updatedAt instanceof Date
+        ? payload.updatedAt.getTime()
+        : Date.now();
     sets.push('updated_at = ?');
     params.push(now);
     params.push(id);

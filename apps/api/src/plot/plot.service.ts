@@ -68,17 +68,26 @@ export class PlotService implements OnModuleInit {
     const row = this.dbService.db
       .prepare<
         [number],
-        { content: string; updated_at: number }
-      >('SELECT content, updated_at FROM plots WHERE project_id = ?')
+        {
+          id: number;
+          project_id: number;
+          content: string;
+          created_at: number;
+          updated_at: number;
+          deleted_at: number | null;
+        }
+      >(
+        'SELECT id, project_id, content, created_at, updated_at, deleted_at FROM plots WHERE project_id = ? AND deleted_at IS NULL',
+      )
       .get(projectId);
     if (!row) {
       const now = Date.now();
       const content = this.defaultTemplate();
       this.dbService.db
         .prepare(
-          'INSERT INTO plots (project_id, content, updated_at) VALUES (?, ?, ?)',
+          'INSERT INTO plots (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
         )
-        .run(projectId, content, now);
+        .run(projectId, content, now, now);
       return { content, updatedAt: new Date(now) };
     }
     return { content: row.content, updatedAt: new Date(row.updated_at) };
@@ -125,7 +134,7 @@ export class PlotService implements OnModuleInit {
           'INSERT INTO plot_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
         ).run(pid, content, diff, ts);
         db.prepare(
-          'UPDATE plots SET content = ?, updated_at = ? WHERE project_id = ?',
+          'UPDATE plots SET content = ?, updated_at = ? WHERE project_id = ? AND deleted_at IS NULL',
         ).run(content, ts, pid);
       },
     );

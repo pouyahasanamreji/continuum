@@ -96,8 +96,8 @@ export class MigrationService {
           .run(projectPath, name, now, now);
         projectId = Number(info.lastInsertRowid);
         db.prepare(
-          'INSERT INTO plots (project_id, content, updated_at) VALUES (?, ?, ?)',
-        ).run(projectId, this.plot.defaultTemplate(), now);
+          'INSERT INTO plots (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
+        ).run(projectId, this.plot.defaultTemplate(), now, now);
         db.prepare(
           'INSERT INTO knowledge (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
         ).run(projectId, '', now, now);
@@ -108,7 +108,7 @@ export class MigrationService {
           .prepare<
             [number],
             { content: string }
-          >('SELECT content FROM plots WHERE project_id = ?')
+          >('SELECT content FROM plots WHERE project_id = ? AND deleted_at IS NULL')
           .get(projectId);
         const cur = current?.content ?? '';
         if (cur !== input.plotContent) {
@@ -116,7 +116,7 @@ export class MigrationService {
             'INSERT INTO plot_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
           ).run(projectId, input.plotContent, '[migration]', now);
           db.prepare(
-            'UPDATE plots SET content = ?, updated_at = ? WHERE project_id = ?',
+            'UPDATE plots SET content = ?, updated_at = ? WHERE project_id = ? AND deleted_at IS NULL',
           ).run(input.plotContent, now, projectId);
           plotUpdated = true;
         }

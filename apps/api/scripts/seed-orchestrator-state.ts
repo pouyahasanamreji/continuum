@@ -160,9 +160,9 @@ function main(): void {
     ).id;
 
     db.prepare(
-      `INSERT INTO plots (project_id, content, updated_at) VALUES (?, ?, ?)
+      `INSERT INTO plots (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)
        ON CONFLICT(project_id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
-    ).run(projectId, plotContent, now);
+    ).run(projectId, plotContent, now, now);
 
     db.prepare(
       `INSERT INTO knowledge (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)
