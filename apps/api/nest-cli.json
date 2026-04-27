@@ -3,9 +3,6 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
-    "deleteOutDir": false,
-    "assets": [
-      { "include": "orchestrator/assets/**/*", "outDir": "dist" }
-    ]
+    "deleteOutDir": false
   }
 }

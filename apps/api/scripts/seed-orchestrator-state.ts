@@ -1,12 +1,12 @@
 import Database from 'better-sqlite3';
 import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
-import { migrate } from '../src/orchestrator/schema';
+import { migrate } from '../src/database/schema';
 import {
   dateStringToMs,
   parseAgentDoc,
   stripBackticks,
-} from '../src/orchestrator/state-parser';
+} from '../src/migration/domain/state-parser';
 
 const ORCHESTRATOR_ROOT =
   process.env.ORCHESTRATOR_ROOT ?? '/Users/h.amreji/Pers/continuum';
