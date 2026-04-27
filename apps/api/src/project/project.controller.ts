@@ -68,7 +68,7 @@ export class ProjectController {
   ) {
     try {
       const path = decodePath(encodedPath);
-      return this.projects.rename(path, body.name);
+      return this.projects.update(path, { name: body.name });
     } catch (e) {
       mapServiceError(e);
     }

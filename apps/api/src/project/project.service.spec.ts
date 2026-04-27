@@ -223,12 +223,12 @@ describe('ProjectService.delete', () => {
   });
 });
 
-describe('ProjectService.rename', () => {
+describe('ProjectService.update', () => {
   it('updates name, leaves path stable', () => {
     const { service } = makeService();
     const path = '/Users/foo/proj';
     service.create({ path, name: 'orig' });
-    const out = service.rename(path, 'renamed');
+    const out = service.update(path, { name: 'renamed' });
     expect(out.path).toBe(path);
     expect(out.name).toBe('renamed');
   });
@@ -236,14 +236,16 @@ describe('ProjectService.rename', () => {
   it('rejects newlines in name', () => {
     const { service } = makeService();
     service.create({ path: '/x/y' });
-    expect(() => service.rename('/x/y', 'bad\nname')).toThrow(
+    expect(() => service.update('/x/y', { name: 'bad\nname' })).toThrow(
       ProjectServiceError,
     );
   });
 
-  it('rejects rename of nonexistent project', () => {
+  it('rejects update of nonexistent project', () => {
     const { service } = makeService();
-    expect(() => service.rename('/nope', 'x')).toThrow(ProjectServiceError);
+    expect(() => service.update('/nope', { name: 'x' })).toThrow(
+      ProjectServiceError,
+    );
   });
 });
 

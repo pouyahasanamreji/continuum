@@ -38,7 +38,7 @@ export class ProjectTool {
   @Tool({
     name: 'project_list',
     description:
-      'List all projects (orchestrator project records). Returns array of {path, name, createdAt, updatedAt}.',
+      'List all projects (orchestrator project records). Returns array of {id, path, name, createdAt, updatedAt, deletedAt}.',
     parameters: z.object({}),
   })
   projectList() {
@@ -87,7 +87,7 @@ export class ProjectTool {
   })
   projectRename(args: RenameProjectDto) {
     try {
-      return toolSuccess(this.projects.rename(args.path, args.name));
+      return toolSuccess(this.projects.update(args.path, { name: args.name }));
     } catch (e) {
       return toolError(e);
     }

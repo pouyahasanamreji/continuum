@@ -4,6 +4,7 @@ import { Project } from './domain/project';
 import { ProjectServiceError } from '../common/errors/service-errors';
 import { ProjectRepository } from './infrastructure/persistence/project.repository';
 import { PlotService } from '../plot/plot.service';
+import { IPaginationOptions } from '../utils/types/pagination-options';
 
 @Injectable()
 export class ProjectService {
@@ -52,15 +53,27 @@ export class ProjectService {
   }
 
   list(): Project[] {
-    return this.repo.list();
+    return this.repo.findAll();
+  }
+
+  findManyWithPagination(options: IPaginationOptions): Project[] {
+    return this.repo.findManyWithPagination(options);
   }
 
   get(path: string): Project | null {
     return this.repo.findByPath(path);
   }
 
+  findIdByPathOrThrow(path: string): number {
+    const id = this.repo.findIdByPath(path);
+    if (id === null) {
+      throw new ProjectServiceError('project_not_found', path);
+    }
+    return id;
+  }
+
   assertExists(path: string): void {
-    if (!this.repo.exists(path)) {
+    if (this.repo.findIdByPath(path) === null) {
       throw new ProjectServiceError('project_not_found', path);
     }
   }
@@ -87,20 +100,28 @@ export class ProjectService {
     return result.project;
   }
 
-  rename(path: string, newName: string): Project {
+  update(path: string, patch: { name?: string }): Project {
     const canonical = this.canonicalize(path);
-    this.assertExists(canonical);
-    const trimmed = newName.trim();
-    if (!trimmed || /[\r\n]/.test(trimmed)) {
-      throw new ProjectServiceError('invalid_name');
+    const id = this.findIdByPathOrThrow(canonical);
+    if (patch.name !== undefined) {
+      const trimmed = patch.name.trim();
+      if (!trimmed || /[\r\n]/.test(trimmed)) {
+        throw new ProjectServiceError('invalid_name');
+      }
+      return this.repo.update(id, {
+        name: trimmed,
+        updatedAt: new Date(),
+      });
     }
-    return this.repo.rename(canonical, trimmed, Date.now());
+    const existing = this.repo.findById(id);
+    if (!existing) throw new ProjectServiceError('project_not_found', path);
+    return existing;
   }
 
   delete(path: string): { deleted: true; cascadedAgents: number } {
     const canonical = this.canonicalize(path);
-    this.assertExists(canonical);
-    const { cascadedAgents } = this.repo.delete(canonical);
+    const id = this.findIdByPathOrThrow(canonical);
+    const { cascadedAgents } = this.repo.hardRemove(id);
     return { deleted: true, cascadedAgents };
   }
 }

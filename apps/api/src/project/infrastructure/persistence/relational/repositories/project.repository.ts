@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { OrchestratorDbService } from '../../../../../database/orchestrator-db.service';
 import { Project } from '../../../../domain/project';
+import { DeepPartial } from '../../../../../utils/types/deep-partial.type';
+import { IPaginationOptions } from '../../../../../utils/types/pagination-options';
 import {
   ProjectCreatePayload,
   ProjectCreateResult,
@@ -15,7 +17,7 @@ export class ProjectRelationalRepository extends ProjectRepository {
     super();
   }
 
-  list(): Project[] {
+  findAll(): Project[] {
     const rows = this.dbs.db
       .prepare<
         unknown[],
@@ -24,6 +26,18 @@ export class ProjectRelationalRepository extends ProjectRepository {
         'SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC',
       )
       .all();
+    return rows.map((r) => ProjectMapper.toDomain(r));
+  }
+
+  findManyWithPagination(options: IPaginationOptions): Project[] {
+    const rows = this.dbs.db
+      .prepare<
+        [number, number],
+        ProjectEntity
+      >(
+        'SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?',
+      )
+      .all(options.limit, (options.page - 1) * options.limit);
     return rows.map((r) => ProjectMapper.toDomain(r));
   }
 
@@ -37,20 +51,24 @@ export class ProjectRelationalRepository extends ProjectRepository {
     return row ? row.id : null;
   }
 
+  findById(id: number): Project | null {
+    const row = this.dbs.db
+      .prepare<
+        [number],
+        ProjectEntity
+      >('SELECT * FROM projects WHERE id = ? AND deleted_at IS NULL')
+      .get(id);
+    return row ? ProjectMapper.toDomain(row) : null;
+  }
+
   findByPath(path: string): Project | null {
     const row = this.dbs.db
       .prepare<
         [string],
         ProjectEntity
-      >(
-        'SELECT * FROM projects WHERE path = ? AND deleted_at IS NULL',
-      )
+      >('SELECT * FROM projects WHERE path = ? AND deleted_at IS NULL')
       .get(path);
     return row ? ProjectMapper.toDomain(row) : null;
-  }
-
-  exists(path: string): boolean {
-    return this.findIdByPath(path) !== null;
   }
 
   create(payload: ProjectCreatePayload): ProjectCreateResult {
@@ -88,22 +106,31 @@ export class ProjectRelationalRepository extends ProjectRepository {
     return { ok: true, project: created };
   }
 
-  rename(path: string, name: string, now: number): Project {
+  update(id: number, payload: DeepPartial<Project>): Project {
+    const sets: string[] = [];
+    const params: (string | number | null)[] = [];
+    if (payload.name !== undefined) {
+      sets.push('name = ?');
+      params.push(payload.name);
+    }
+    const now =
+      payload.updatedAt instanceof Date ? payload.updatedAt.getTime() : Date.now();
+    sets.push('updated_at = ?');
+    params.push(now);
+    params.push(id);
     this.dbs.db
       .prepare(
-        'UPDATE projects SET name = ?, updated_at = ? WHERE path = ? AND deleted_at IS NULL',
+        `UPDATE projects SET ${sets.join(', ')} WHERE id = ? AND deleted_at IS NULL`,
       )
-      .run(name, now, path);
-    const updated = this.findByPath(path);
+      .run(...params);
+    const updated = this.findById(id);
     if (!updated) {
-      throw new Error(`project ${path} not found after rename`);
+      throw new Error(`project ${id} not found after update`);
     }
     return updated;
   }
 
-  delete(path: string): { cascadedAgents: number } {
-    const id = this.findIdByPath(path);
-    if (id === null) return { cascadedAgents: 0 };
+  hardRemove(id: number): { cascadedAgents: number } {
     const count = (
       this.dbs.db
         .prepare<
