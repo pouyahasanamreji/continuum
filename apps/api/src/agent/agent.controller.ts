@@ -53,7 +53,7 @@ export class AgentController {
       const page = query?.page ?? 1;
       const limit = Math.min(query?.limit ?? 10, 50);
       return infinityPagination(
-        this.agents.findManyWithPagination(query.project, { page, limit }),
+        this.agents.findManyWithPagination({ ...query, page, limit }),
         { page, limit },
       );
     } catch (e) {
@@ -91,8 +91,7 @@ export class AgentController {
   @ApiCreatedResponse({ type: Agent })
   createAgent(@Body() body: CreateAgentDto): Agent {
     try {
-      const { project, ...rest } = body;
-      return this.agents.create(project, rest);
+      return this.agents.create(body);
     } catch (e) {
       mapServiceError(e);
     }
@@ -108,8 +107,7 @@ export class AgentController {
   ): Agent {
     if (!body.project) missingProject();
     try {
-      const { project, ...patch } = body;
-      return this.agents.update(project, slug, patch);
+      return this.agents.update(slug, body);
     } catch (e) {
       mapServiceError(e);
     }

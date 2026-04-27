@@ -8,26 +8,9 @@ import {
   AgentUpdatePatch,
 } from './infrastructure/persistence/agent.repository';
 import { ProjectRepository } from '../project/infrastructure/persistence/project.repository';
-import { IPaginationOptions } from '../utils/types/pagination-options';
-
-interface AgentCreateInput {
-  slug: string;
-  branch: string;
-  worktree: string;
-  reservedPaths?: string[];
-  request: string;
-  plan: string;
-  implPrompt: string;
-  coordinationBrief: string;
-}
-
-interface AgentUpdateInput {
-  status?: 'active' | 'merged' | 'abandoned';
-  reservedPaths?: string[];
-  postMergeNotes?: string;
-  mergedCommit?: string;
-  abandonedReason?: string;
-}
+import { CreateAgentDto } from './dto/create-agent.dto';
+import { UpdateAgentDto } from './dto/update-agent.dto';
+import { QueryAgentDto } from './dto/query-agent.dto';
 
 @Injectable()
 export class AgentService {
@@ -49,12 +32,12 @@ export class AgentService {
     return this.repo.findAll(projectId);
   }
 
-  findManyWithPagination(
-    projectPath: string,
-    options: IPaginationOptions,
-  ): Agent[] {
-    const projectId = this.resolveProjectIdOrThrow(projectPath);
-    return this.repo.findManyWithPagination(projectId, options);
+  findManyWithPagination(queryAgentDto: QueryAgentDto): Agent[] {
+    const projectId = this.resolveProjectIdOrThrow(queryAgentDto.project);
+    return this.repo.findManyWithPagination(projectId, {
+      page: queryAgentDto.page ?? 1,
+      limit: queryAgentDto.limit ?? 10,
+    });
   }
 
   get(projectPath: string, slug: string): Agent | null {
@@ -62,30 +45,30 @@ export class AgentService {
     return this.repo.findByProjectIdAndSlug(projectId, slug);
   }
 
-  create(projectPath: string, input: AgentCreateInput): Agent {
-    const projectId = this.resolveProjectIdOrThrow(projectPath);
-    if (!SLUG_RE.test(input.slug)) {
-      throw new AgentServiceError('invalid_slug', input.slug);
+  create(createAgentDto: CreateAgentDto): Agent {
+    const projectId = this.resolveProjectIdOrThrow(createAgentDto.project);
+    if (!SLUG_RE.test(createAgentDto.slug)) {
+      throw new AgentServiceError('invalid_slug', createAgentDto.slug);
     }
     const result = this.repo.create(projectId, {
-      slug: input.slug,
-      branch: input.branch,
-      worktree: input.worktree,
-      reservedPaths: input.reservedPaths ?? [],
-      request: input.request,
-      plan: input.plan,
-      implPrompt: input.implPrompt,
-      coordinationBrief: input.coordinationBrief,
+      slug: createAgentDto.slug,
+      branch: createAgentDto.branch,
+      worktree: createAgentDto.worktree,
+      reservedPaths: createAgentDto.reservedPaths ?? [],
+      request: createAgentDto.request,
+      plan: createAgentDto.plan,
+      implPrompt: createAgentDto.implPrompt,
+      coordinationBrief: createAgentDto.coordinationBrief,
       now: Date.now(),
     });
     if (!result.ok) {
-      throw new AgentServiceError('slug_conflict', input.slug);
+      throw new AgentServiceError('slug_conflict', createAgentDto.slug);
     }
     return result.agent;
   }
 
-  update(projectPath: string, slug: string, patch: AgentUpdateInput): Agent {
-    const projectId = this.resolveProjectIdOrThrow(projectPath);
+  update(slug: string, updateAgentDto: UpdateAgentDto): Agent {
+    const projectId = this.resolveProjectIdOrThrow(updateAgentDto.project);
     const existing = this.repo.findByProjectIdAndSlug(projectId, slug);
     if (!existing) throw new AgentServiceError('not_found', slug);
 
@@ -93,56 +76,63 @@ export class AgentService {
     const out: AgentUpdatePatch = { updatedAt: now };
     let touched = false;
 
-    if (patch.status !== undefined && patch.status !== existing.status) {
+    if (
+      updateAgentDto.status !== undefined &&
+      updateAgentDto.status !== existing.status
+    ) {
       const allowed =
-        (existing.status === 'draft' && patch.status === 'active') ||
+        (existing.status === 'draft' && updateAgentDto.status === 'active') ||
         (existing.status === 'active' &&
-          (patch.status === 'merged' || patch.status === 'abandoned'));
+          (updateAgentDto.status === 'merged' ||
+            updateAgentDto.status === 'abandoned'));
       if (!allowed) {
         throw new AgentServiceError(
           'invalid_transition',
-          `${existing.status} -> ${patch.status}`,
+          `${existing.status} -> ${updateAgentDto.status}`,
         );
       }
-      out.status = patch.status;
+      out.status = updateAgentDto.status;
       touched = true;
-      if (patch.status === 'active' && existing.dispatchedAt === null) {
+      if (
+        updateAgentDto.status === 'active' &&
+        existing.dispatchedAt === null
+      ) {
         out.dispatchedAt = now;
       }
-      if (patch.status === 'merged') {
-        if (!patch.mergedCommit)
+      if (updateAgentDto.status === 'merged') {
+        if (!updateAgentDto.mergedCommit)
           throw new AgentServiceError('missing_merged_commit');
-        if (patch.mergedCommit.length < 7) {
+        if (updateAgentDto.mergedCommit.length < 7) {
           throw new AgentServiceError(
             'invalid_merged_commit',
-            patch.mergedCommit,
+            updateAgentDto.mergedCommit,
           );
         }
         out.mergedAt = now;
-        out.mergedCommit = patch.mergedCommit;
+        out.mergedCommit = updateAgentDto.mergedCommit;
       }
-      if (patch.status === 'abandoned') {
-        if (!patch.abandonedReason)
+      if (updateAgentDto.status === 'abandoned') {
+        if (!updateAgentDto.abandonedReason)
           throw new AgentServiceError('missing_abandoned_reason');
-        out.abandonedReason = patch.abandonedReason;
+        out.abandonedReason = updateAgentDto.abandonedReason;
       }
-    } else if (patch.mergedCommit && existing.status === 'merged') {
-      if (patch.mergedCommit.length < 7) {
+    } else if (updateAgentDto.mergedCommit && existing.status === 'merged') {
+      if (updateAgentDto.mergedCommit.length < 7) {
         throw new AgentServiceError(
           'invalid_merged_commit',
-          patch.mergedCommit,
+          updateAgentDto.mergedCommit,
         );
       }
-      out.mergedCommit = patch.mergedCommit;
+      out.mergedCommit = updateAgentDto.mergedCommit;
       touched = true;
     }
 
-    if (patch.reservedPaths !== undefined) {
-      out.reservedPaths = patch.reservedPaths;
+    if (updateAgentDto.reservedPaths !== undefined) {
+      out.reservedPaths = updateAgentDto.reservedPaths;
       touched = true;
     }
-    if (patch.postMergeNotes !== undefined) {
-      out.postMergeNotes = patch.postMergeNotes;
+    if (updateAgentDto.postMergeNotes !== undefined) {
+      out.postMergeNotes = updateAgentDto.postMergeNotes;
       touched = true;
     }
 

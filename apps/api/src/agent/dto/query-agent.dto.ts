@@ -7,7 +7,12 @@ import {
   IsString,
   ValidateNested,
 } from 'class-validator';
+import { z } from 'zod';
 import { Agent } from '../domain/agent';
+import { AgentStatusEnum } from '../../agent-statuses/agent-statuses.enum';
+
+export const listAgentDto = z.object({ project: z.string() });
+export type ListAgentDto = z.infer<typeof listAgentDto>;
 
 export class FilterAgentDto {
   @ApiPropertyOptional({
@@ -15,8 +20,8 @@ export class FilterAgentDto {
     enum: ['draft', 'active', 'merged', 'abandoned'],
   })
   @IsOptional()
-  @IsEnum(['draft', 'active', 'merged', 'abandoned'])
-  status?: 'draft' | 'active' | 'merged' | 'abandoned' | null;
+  @IsEnum(AgentStatusEnum)
+  status?: AgentStatusEnum | null;
 }
 
 export class SortAgentDto {

@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-
-export type AgentStatus = 'draft' | 'active' | 'merged' | 'abandoned';
+import { AgentStatusEnum } from '../../agent-statuses/agent-statuses.enum';
 
 export class Agent {
   @ApiProperty({ type: Number, example: 1 })
@@ -17,7 +16,7 @@ export class Agent {
     enum: ['draft', 'active', 'merged', 'abandoned'],
     example: 'draft',
   })
-  status!: AgentStatus;
+  status!: AgentStatusEnum;
 
   @ApiProperty({ type: String, example: 'feat/alpha' })
   branch!: string;

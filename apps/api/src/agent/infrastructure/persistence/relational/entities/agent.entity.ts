@@ -1,10 +1,10 @@
-import type { AgentStatus } from '../../../../domain/agent';
+import type { AgentStatusEnum } from '../../../../../agent-statuses/agent-statuses.enum';
 
 export interface AgentEntity {
   id: number;
   project_id: number;
   slug: string;
-  status: AgentStatus;
+  status: AgentStatusEnum;
   branch: string;
   worktree: string;
   reserved_paths_json: string;

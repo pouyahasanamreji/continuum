@@ -2,10 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { Tool } from '@rekog/mcp-nest';
 import { AgentService } from './agent.service';
 import { AgentServiceError } from '../common/errors/service-errors';
-import { listAgentDto } from './dto/list-agent.dto';
-import type { ListAgentDto } from './dto/list-agent.dto';
-import { getAgentDto } from './dto/get-agent.dto';
-import type { GetAgentDto } from './dto/get-agent.dto';
+import { listAgentDto } from './dto/query-agent.dto';
+import type { ListAgentDto } from './dto/query-agent.dto';
+import { getAgentDto } from './dto/agent.dto';
+import type { GetAgentDto } from './dto/agent.dto';
 import { createAgentDto } from './dto/create-agent.dto';
 import type { CreateAgentInput } from './dto/create-agent.dto';
 import { updateAgentDto } from './dto/update-agent.dto';
@@ -84,8 +84,7 @@ export class AgentTool {
   })
   agentCreate(args: CreateAgentInput) {
     try {
-      const { project, ...rest } = args;
-      const created = this.agents.create(project, rest);
+      const created = this.agents.create(args);
       return {
         content: [
           { type: 'text' as const, text: JSON.stringify(created, null, 2) },
@@ -104,8 +103,7 @@ export class AgentTool {
   })
   agentUpdate(args: UpdateAgentInput) {
     try {
-      const { project, slug, ...patch } = args;
-      const updated = this.agents.update(project, slug, patch);
+      const updated = this.agents.update(args.slug, args);
       return {
         content: [
           { type: 'text' as const, text: JSON.stringify(updated, null, 2) },
