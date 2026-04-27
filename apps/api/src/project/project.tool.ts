@@ -99,7 +99,7 @@ export class ProjectTool {
   })
   projectDelete(args: PathOnlyDto) {
     try {
-      return toolSuccess(this.projects.delete(args.path));
+      return toolSuccess(this.projects.remove(args.path));
     } catch (e) {
       return toolError(e);
     }

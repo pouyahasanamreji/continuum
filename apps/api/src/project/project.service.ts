@@ -2,9 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { basename } from 'node:path';
 import { Project } from './domain/project';
 import { ProjectServiceError } from '../common/errors/service-errors';
-import { ProjectRepository } from './infrastructure/persistence/project.repository';
+import {
+  ProjectRepository,
+  ProjectUpdatePatch,
+} from './infrastructure/persistence/project.repository';
 import { PlotService } from '../plot/plot.service';
-import { IPaginationOptions } from '../utils/types/pagination-options';
+import { QueryProjectDto } from './dto/query-project.dto';
 
 @Injectable()
 export class ProjectService {
@@ -56,8 +59,18 @@ export class ProjectService {
     return this.repo.findAll();
   }
 
-  findManyWithPagination(options: IPaginationOptions): Project[] {
-    return this.repo.findManyWithPagination(options);
+  findManyWithPagination(queryProjectDto: QueryProjectDto): Project[] {
+    const {
+      page = 1,
+      limit = 10,
+      filters = null,
+      sort = null,
+    } = queryProjectDto;
+    return this.repo.findManyWithPagination({
+      filterOptions: filters,
+      sortOptions: sort,
+      paginationOptions: { page, limit },
+    });
   }
 
   get(path: string): Project | null {
@@ -108,20 +121,21 @@ export class ProjectService {
       if (!trimmed || /[\r\n]/.test(trimmed)) {
         throw new ProjectServiceError('invalid_name');
       }
-      return this.repo.update(id, {
+      const repoPatch: ProjectUpdatePatch = {
         name: trimmed,
-        updatedAt: new Date(),
-      });
+        updatedAt: Date.now(),
+      };
+      return this.repo.update(id, repoPatch);
     }
     const existing = this.repo.findById(id);
     if (!existing) throw new ProjectServiceError('project_not_found', path);
     return existing;
   }
 
-  delete(path: string): { deleted: true; cascadedAgents: number } {
+  remove(path: string): { deleted: true; cascadedAgents: number } {
     const canonical = this.canonicalize(path);
     const id = this.findIdByPathOrThrow(canonical);
-    const { cascadedAgents } = this.repo.hardRemove(id);
+    const { cascadedAgents } = this.repo.remove(id);
     return { deleted: true, cascadedAgents };
   }
 }

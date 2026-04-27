@@ -13,7 +13,6 @@ import {
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
-  ApiNoContentResponse,
   ApiOkResponse,
   ApiParam,
   ApiTags,
@@ -24,6 +23,7 @@ import { mapServiceError } from '../common/errors/map-service-error';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { QueryProjectDto } from './dto/query-project.dto';
+import { ProjectDeleteResponseDto } from './dto/project.dto';
 import {
   InfinityPaginationResponse,
   InfinityPaginationResponseDto,
@@ -49,7 +49,7 @@ export class ProjectController {
     const page = query?.page ?? 1;
     const limit = Math.min(query?.limit ?? 10, 50);
     return infinityPagination(
-      this.projects.findManyWithPagination({ page, limit }),
+      this.projects.findManyWithPagination({ ...query, page, limit }),
       { page, limit },
     );
   }
@@ -105,11 +105,11 @@ export class ProjectController {
   @Delete('projects/:encodedPath')
   @HttpCode(HttpStatus.OK)
   @ApiParam({ name: 'encodedPath', type: String, required: true })
-  @ApiNoContentResponse()
+  @ApiOkResponse({ type: ProjectDeleteResponseDto })
   deleteProject(@Param('encodedPath') encodedPath: string) {
     try {
       const path = decodePath(encodedPath);
-      return this.projects.delete(path);
+      return this.projects.remove(path);
     } catch (e) {
       mapServiceError(e);
     }

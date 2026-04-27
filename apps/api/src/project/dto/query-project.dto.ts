@@ -41,20 +41,28 @@ export class QueryProjectDto {
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
-  @Transform(({ value }) =>
-    value ? plainToInstance(FilterProjectDto, JSON.parse(value)) : undefined,
-  )
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    try {
+      return plainToInstance(FilterProjectDto, JSON.parse(value));
+    } catch {
+      return undefined;
+    }
+  })
   @ValidateNested()
   @Type(() => FilterProjectDto)
   filters?: FilterProjectDto | null;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
-  @Transform(({ value }) =>
-    value
-      ? plainToInstance(SortProjectDto, JSON.parse(value))
-      : undefined,
-  )
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    try {
+      return plainToInstance(SortProjectDto, JSON.parse(value));
+    } catch {
+      return undefined;
+    }
+  })
   @ValidateNested({ each: true })
   @Type(() => SortProjectDto)
   sort?: SortProjectDto[] | null;

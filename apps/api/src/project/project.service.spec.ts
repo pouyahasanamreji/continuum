@@ -152,7 +152,7 @@ describe('ProjectService.create', () => {
   });
 });
 
-describe('ProjectService.delete', () => {
+describe('ProjectService.remove', () => {
   it('cascades plot/plot_history/knowledge/knowledge_history/agents', () => {
     const { service, db, agents, idOf } = makeService();
     const path = '/Users/foo/proj';
@@ -183,7 +183,7 @@ describe('ProjectService.delete', () => {
 
     expect(agents()).toBe(2);
 
-    const result = service.delete(path);
+    const result = service.remove(path);
     expect(result.deleted).toBe(true);
     expect(result.cascadedAgents).toBe(2);
 
