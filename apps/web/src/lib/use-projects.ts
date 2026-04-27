@@ -2,6 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { getJson } from "./api";
 import type { ProjectFull } from "@/types/project";
 
+interface PaginatedProjects {
+  data: ProjectFull[];
+  hasNextPage: boolean;
+}
+
 export function useProjects() {
   const [projects, setProjects] = useState<ProjectFull[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -10,8 +15,10 @@ export function useProjects() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getJson<ProjectFull[]>("/api/orchestrator/projects");
-      setProjects(data);
+      const res = await getJson<PaginatedProjects>(
+        "/api/orchestrator/projects?limit=50",
+      );
+      setProjects(res.data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
