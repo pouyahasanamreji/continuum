@@ -1,7 +1,8 @@
 // Synchronous repository (better-sqlite3 is sync) — diverges from
 // boilerplate's Promise-returning ports.
 import { IPaginationOptions } from '../../../utils/types/pagination-options';
-import { Agent, AgentStatus } from '../../domain/agent';
+import { Agent } from '../../domain/agent';
+import { AgentStatusEnum } from '../../../agent-statuses/agent-statuses.enum';
 
 export interface AgentCreatePayload {
   slug: string;
@@ -16,7 +17,7 @@ export interface AgentCreatePayload {
 }
 
 export interface AgentUpdatePatch {
-  status?: AgentStatus;
+  status?: AgentStatusEnum;
   dispatchedAt?: number;
   mergedAt?: number;
   mergedCommit?: string;
@@ -35,7 +36,7 @@ export interface AgentMigrationPayload {
   implPrompt: string;
   coordinationBrief: string;
   postMergeNotes: string;
-  status: AgentStatus;
+  status: AgentStatusEnum;
   dispatchedAt: number | null;
   mergedAt: number | null;
   mergedCommit: string | null;

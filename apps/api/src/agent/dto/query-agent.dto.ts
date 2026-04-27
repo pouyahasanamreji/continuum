@@ -8,6 +8,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Agent } from '../domain/agent';
+import { AgentStatusEnum } from '../../agent-statuses/agent-statuses.enum';
 
 export class FilterAgentDto {
   @ApiPropertyOptional({
@@ -15,8 +16,8 @@ export class FilterAgentDto {
     enum: ['draft', 'active', 'merged', 'abandoned'],
   })
   @IsOptional()
-  @IsEnum(['draft', 'active', 'merged', 'abandoned'])
-  status?: 'draft' | 'active' | 'merged' | 'abandoned' | null;
+  @IsEnum(AgentStatusEnum)
+  status?: AgentStatusEnum | null;
 }
 
 export class SortAgentDto {
