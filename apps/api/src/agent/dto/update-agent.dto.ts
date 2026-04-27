@@ -1,4 +1,13 @@
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import {
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { z } from 'zod';
+import { CreateAgentDto } from './create-agent.dto';
 
 export const updateAgentDto = z.object({
   project: z.string(),
@@ -9,4 +18,40 @@ export const updateAgentDto = z.object({
   mergedCommit: z.string().optional(),
   abandonedReason: z.string().optional(),
 });
-export type UpdateAgentDto = z.infer<typeof updateAgentDto>;
+export type UpdateAgentInput = z.infer<typeof updateAgentDto>;
+
+export class UpdateAgentDto extends PartialType(CreateAgentDto) {
+  @ApiProperty({ type: String, example: '/Users/foo/proj' })
+  @IsString()
+  @IsNotEmpty()
+  project!: string;
+
+  @ApiPropertyOptional({
+    type: String,
+    enum: ['active', 'merged', 'abandoned'],
+  })
+  @IsOptional()
+  @IsEnum(['active', 'merged', 'abandoned'])
+  status?: 'active' | 'merged' | 'abandoned';
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  reservedPaths?: string[];
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  postMergeNotes?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  mergedCommit?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  abandonedReason?: string;
+}

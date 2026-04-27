@@ -29,7 +29,10 @@ function makeService(): {
   } as unknown as PlotService;
   const projectRepo = new ProjectRelationalRepository(dbs);
   const projects = new ProjectService(projectRepo, plot);
-  const agents = new AgentService(new AgentRelationalRepository(dbs), dbs);
+  const agents = new AgentService(
+    new AgentRelationalRepository(dbs),
+    projectRepo,
+  );
   const service = new MigrationService(
     dbs,
     projects,

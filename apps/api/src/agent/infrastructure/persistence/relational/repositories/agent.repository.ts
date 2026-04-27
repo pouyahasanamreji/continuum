@@ -8,6 +8,7 @@ import {
   AgentRepository,
   AgentUpdatePatch,
 } from '../../agent.repository';
+import { IPaginationOptions } from '../../../../../utils/types/pagination-options';
 import { AgentEntity } from '../entities/agent.entity';
 import { AgentMapper } from '../mappers/agent.mapper';
 
@@ -17,7 +18,7 @@ export class AgentRelationalRepository extends AgentRepository {
     super();
   }
 
-  list(projectId: number): Agent[] {
+  findAll(projectId: number): Agent[] {
     const rows = this.dbs.db
       .prepare<
         [number],
@@ -29,7 +30,36 @@ export class AgentRelationalRepository extends AgentRepository {
     return rows.map((r) => AgentMapper.toDomain(r));
   }
 
-  findBySlug(projectId: number, slug: string): Agent | null {
+  findManyWithPagination(
+    projectId: number,
+    options: IPaginationOptions,
+  ): Agent[] {
+    const rows = this.dbs.db
+      .prepare<
+        [number, number, number],
+        AgentEntity
+      >(
+        'SELECT * FROM agents WHERE project_id = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?',
+      )
+      .all(
+        projectId,
+        options.limit,
+        (options.page - 1) * options.limit,
+      );
+    return rows.map((r) => AgentMapper.toDomain(r));
+  }
+
+  findById(id: number): Agent | null {
+    const row = this.dbs.db
+      .prepare<
+        [number],
+        AgentEntity
+      >('SELECT * FROM agents WHERE id = ? AND deleted_at IS NULL')
+      .get(id);
+    return row ? AgentMapper.toDomain(row) : null;
+  }
+
+  findByProjectIdAndSlug(projectId: number, slug: string): Agent | null {
     const row = this.dbs.db
       .prepare<
         [number, string],
@@ -42,8 +72,9 @@ export class AgentRelationalRepository extends AgentRepository {
   }
 
   create(projectId: number, payload: AgentCreatePayload): AgentCreateResult {
+    let agentId: number | null = null;
     try {
-      this.dbs.db
+      const info = this.dbs.db
         .prepare(
           `INSERT INTO agents (
              project_id, slug, status, branch, worktree, reserved_paths_json,
@@ -64,6 +95,7 @@ export class AgentRelationalRepository extends AgentRepository {
           payload.now,
           payload.now,
         );
+      agentId = Number(info.lastInsertRowid);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('UNIQUE constraint failed')) {
@@ -71,7 +103,7 @@ export class AgentRelationalRepository extends AgentRepository {
       }
       throw err;
     }
-    const created = this.findBySlug(projectId, payload.slug);
+    const created = this.findById(agentId);
     if (!created) {
       throw new Error(
         `agent ${payload.slug} not found after insert (project_id=${projectId})`,
@@ -80,7 +112,7 @@ export class AgentRelationalRepository extends AgentRepository {
     return { ok: true, agent: created };
   }
 
-  update(projectId: number, slug: string, patch: AgentUpdatePatch): void {
+  update(id: number, patch: AgentUpdatePatch): void {
     const sets: string[] = ['updated_at = ?'];
     const params: (string | number | null)[] = [patch.updatedAt];
 
@@ -113,10 +145,10 @@ export class AgentRelationalRepository extends AgentRepository {
       params.push(patch.postMergeNotes);
     }
 
-    params.push(projectId, slug);
+    params.push(id);
     this.dbs.db
       .prepare(
-        `UPDATE agents SET ${sets.join(', ')} WHERE project_id = ? AND slug = ?`,
+        `UPDATE agents SET ${sets.join(', ')} WHERE id = ? AND deleted_at IS NULL`,
       )
       .run(...params);
   }
