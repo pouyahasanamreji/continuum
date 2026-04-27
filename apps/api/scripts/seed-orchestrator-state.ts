@@ -165,9 +165,9 @@ function main(): void {
     ).run(projectId, plotContent, now);
 
     db.prepare(
-      `INSERT INTO knowledge (project_id, content, updated_at) VALUES (?, ?, ?)
+      `INSERT INTO knowledge (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)
        ON CONFLICT(project_id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
-    ).run(projectId, knowledgeContent, now);
+    ).run(projectId, knowledgeContent, now, now);
 
     const upsert = db.prepare(`
       INSERT INTO agents (

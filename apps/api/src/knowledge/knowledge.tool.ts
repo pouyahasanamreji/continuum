@@ -2,10 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { Tool } from '@rekog/mcp-nest';
 import { KnowledgeService } from './knowledge.service';
 import { KnowledgeUpdateError } from '../common/errors/service-errors';
-import { getKnowledgeDto } from './dto/get-knowledge.dto';
-import type { GetKnowledgeDto } from './dto/get-knowledge.dto';
-import { applyKnowledgeDiffDto } from './dto/apply-knowledge-diff.dto';
-import type { ApplyKnowledgeDiffDto } from './dto/apply-knowledge-diff.dto';
+import { getKnowledgeDto } from './dto/query-knowledge.dto';
+import type { GetKnowledgeDto } from './dto/query-knowledge.dto';
+import { updateKnowledgeDto } from './dto/update-knowledge.dto';
+import type { UpdateKnowledgeInput } from './dto/update-knowledge.dto';
 
 function toolError(err: unknown) {
   const msg =
@@ -32,31 +32,23 @@ export class KnowledgeTool {
   })
   knowledgeGet(args: GetKnowledgeDto) {
     try {
-      if (args.section) {
-        const section = this.knowledge.getSection(args.project, args.section);
-        if (section === null) {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Section "${args.section}" not found.`,
-              },
-            ],
-            isError: true,
-          };
-        }
-        return { content: [{ type: 'text' as const, text: section }] };
-      }
-      const all = this.knowledge.getAll(args.project);
-      if (!all) {
+      const found = args.section
+        ? this.knowledge.findBySection(args.project, args.section)
+        : this.knowledge.findOne(args.project);
+      if (!found) {
         return {
           content: [
-            { type: 'text' as const, text: 'Knowledge document is empty.' },
+            {
+              type: 'text' as const,
+              text: args.section
+                ? `Section "${args.section}" not found.`
+                : 'Knowledge document is empty.',
+            },
           ],
           isError: true,
         };
       }
-      return { content: [{ type: 'text' as const, text: all.content }] };
+      return { content: [{ type: 'text' as const, text: found.content }] };
     } catch (e) {
       return toolError(e);
     }
@@ -66,11 +58,14 @@ export class KnowledgeTool {
     name: 'knowledge_update',
     description:
       'Apply a unified-diff (git-format) to the project knowledge.md. Diff MUST include `--- a/knowledge.md` and `+++ b/knowledge.md` headers. Hunks must match current content with zero fuzz — get-edit-diff loop on mismatch.',
-    parameters: applyKnowledgeDiffDto,
+    parameters: updateKnowledgeDto,
   })
-  knowledgeUpdate(args: ApplyKnowledgeDiffDto) {
+  knowledgeUpdate(args: UpdateKnowledgeInput) {
     try {
-      const result = this.knowledge.applyDiff(args.project, args.diff);
+      const result = this.knowledge.update({
+        project: args.project,
+        diff: args.diff,
+      });
       return {
         content: [
           {

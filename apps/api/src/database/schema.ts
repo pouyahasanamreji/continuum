@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -32,7 +32,9 @@ CREATE TABLE IF NOT EXISTS knowledge (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
-  updated_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER NULL
 );
 
 CREATE TABLE IF NOT EXISTS knowledge_history (
@@ -80,8 +82,28 @@ DROP TABLE IF EXISTS projects;
 
 export function migrate(db: Database.Database): void {
   const current = db.pragma('user_version', { simple: true }) as number;
+  // current > SCHEMA_VERSION is downgrade-tolerant pass-through (no version write).
   if (current >= SCHEMA_VERSION) {
     db.exec(SCHEMA_SQL);
+    return;
+  }
+
+  if (current === 3 && SCHEMA_VERSION === 4) {
+    db.pragma('foreign_keys = OFF');
+    try {
+      const tx = db.transaction(() => {
+        db.exec(`
+          ALTER TABLE knowledge ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0;
+          UPDATE knowledge SET created_at = updated_at WHERE created_at = 0;
+          ALTER TABLE knowledge ADD COLUMN deleted_at INTEGER NULL;
+        `);
+        db.exec(SCHEMA_SQL);
+        db.pragma(`user_version = ${SCHEMA_VERSION}`);
+      });
+      tx.immediate();
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
     return;
   }
 

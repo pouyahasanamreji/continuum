@@ -94,8 +94,8 @@ export class ProjectRelationalRepository extends ProjectRepository {
         'INSERT INTO plots (project_id, content, updated_at) VALUES (?, ?, ?)',
       ).run(projectId, payload.plotContent, payload.now);
       db.prepare(
-        'INSERT INTO knowledge (project_id, content, updated_at) VALUES (?, ?, ?)',
-      ).run(projectId, payload.knowledgeContent, payload.now);
+        'INSERT INTO knowledge (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
+      ).run(projectId, payload.knowledgeContent, payload.now, payload.now);
     });
     tx.immediate();
     if (conflict) return { ok: false, reason: 'project_exists' };
