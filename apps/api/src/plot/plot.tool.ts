@@ -2,10 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { Tool } from '@rekog/mcp-nest';
 import { PlotService } from './plot.service';
 import { PlotServiceError } from '../common/errors/service-errors';
-import { applyPlotDiffDto } from './dto/apply-plot-diff.dto';
-import type { ApplyPlotDiffDto } from './dto/apply-plot-diff.dto';
-import { getPlotDto } from './dto/get-plot.dto';
-import type { GetPlotDto } from './dto/get-plot.dto';
+import { updatePlotDto } from './dto/update-plot.dto';
+import type { UpdatePlotInput } from './dto/update-plot.dto';
+import { getPlotDto } from './dto/query-plot.dto';
+import type { GetPlotDto } from './dto/query-plot.dto';
 
 function toolError(err: unknown) {
   const msg =
@@ -32,8 +32,14 @@ export class PlotTool {
   })
   getPlot(args: GetPlotDto) {
     try {
-      const result = this.plot.getForProject(args.project);
-      return { content: [{ type: 'text' as const, text: result.content }] };
+      const found = this.plot.findOne(args.project);
+      if (!found) {
+        return {
+          content: [{ type: 'text' as const, text: 'PLOT.md is empty.' }],
+          isError: true,
+        };
+      }
+      return { content: [{ type: 'text' as const, text: found.content }] };
     } catch (e) {
       return toolError(e);
     }
@@ -43,11 +49,14 @@ export class PlotTool {
     name: 'plot_update',
     description:
       'Apply a unified-diff (git-format) to the project PLOT.md. Diff MUST include `--- a/PLOT.md` and `+++ b/PLOT.md` headers. Hunks must match current content with zero fuzz — get-edit-diff loop on mismatch.',
-    parameters: applyPlotDiffDto,
+    parameters: updatePlotDto,
   })
-  plotUpdate(args: ApplyPlotDiffDto) {
+  plotUpdate(args: UpdatePlotInput) {
     try {
-      const result = this.plot.applyDiffForProject(args.project, args.diff);
+      const result = this.plot.update({
+        project: args.project,
+        diff: args.diff,
+      });
       return {
         content: [
           {

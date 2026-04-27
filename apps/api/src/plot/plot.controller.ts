@@ -1,13 +1,24 @@
 import {
   Controller,
   Get,
-  Header,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
   Query,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { PlotService } from './plot.service';
+import { Plot } from './domain/plot';
+import { QueryPlotDto } from './dto/query-plot.dto';
 import { mapServiceError } from '../common/errors/map-service-error';
+
+function missingProject(): never {
+  throw new UnprocessableEntityException({
+    status: 422,
+    errors: { project: 'missingProjectQuery' },
+  });
+}
 
 @ApiTags('Plot')
 @Controller('api/orchestrator')
@@ -15,20 +26,21 @@ export class PlotController {
   constructor(private readonly plot: PlotService) {}
 
   @Get('plot')
-  @Header('Content-Type', 'text/markdown; charset=utf-8')
-  @Header('Cache-Control', 'no-store')
-  @ApiQuery({ name: 'project', type: String, required: true })
-  @ApiOkResponse({ description: 'Plot markdown body for the project.' })
-  getPlot(@Query('project') project?: string): string {
-    if (!project) {
-      throw new UnprocessableEntityException({
-        status: 422,
-        errors: { project: 'missingProjectQuery' },
-      });
-    }
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: Plot })
+  getPlot(@Query() query: QueryPlotDto): Plot {
+    if (!query.project) missingProject();
     try {
-      return this.plot.getForProject(project).content;
+      const found = this.plot.findOne(query.project);
+      if (!found) {
+        throw new NotFoundException({
+          status: 404,
+          errors: { plot: 'plotNotFound' },
+        });
+      }
+      return found;
     } catch (e) {
+      if (e instanceof NotFoundException) throw e;
       mapServiceError(e);
     }
   }

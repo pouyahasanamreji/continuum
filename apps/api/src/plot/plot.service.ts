@@ -1,21 +1,14 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { existsSync, readFileSync } from 'node:fs';
 import { applyPatch, parsePatch } from 'diff';
-import { OrchestratorDbService } from '../database/orchestrator-db.service';
+import { Plot } from './domain/plot';
 import { ProjectRepository } from '../project/infrastructure/persistence/project.repository';
 import { PlotServiceError } from '../common/errors/service-errors';
+import { PlotRepository } from './infrastructure/persistence/plot.repository';
+import { UpdatePlotDto } from './dto/update-plot.dto';
 
 const HEADER_FROM_RE = /^---\s+a\/PLOT\.md(\s|$)/m;
 const HEADER_TO_RE = /^\+\+\+\s+b\/PLOT\.md(\s|$)/m;
-
-export interface PlotReadResult {
-  content: string;
-  updatedAt: Date;
-}
-
-export interface PlotUpdateResult {
-  updatedAt: Date;
-}
 
 @Injectable()
 export class PlotService implements OnModuleInit {
@@ -24,7 +17,7 @@ export class PlotService implements OnModuleInit {
   private loadedFrom: string | null = null;
 
   constructor(
-    private readonly dbService: OrchestratorDbService,
+    private readonly repo: PlotRepository,
     private readonly projectRepo: ProjectRepository,
   ) {}
 
@@ -55,7 +48,7 @@ export class PlotService implements OnModuleInit {
     return this.cachedTemplate ?? this.loadTemplate();
   }
 
-  private resolveProjectId(projectPath: string): number {
+  private resolveProjectIdOrThrow(projectPath: string): number {
     const id = this.projectRepo.findIdByPath(projectPath);
     if (id === null) {
       throw new PlotServiceError('project_not_found', projectPath);
@@ -63,37 +56,20 @@ export class PlotService implements OnModuleInit {
     return id;
   }
 
-  getForProject(projectPath: string): PlotReadResult {
-    const projectId = this.resolveProjectId(projectPath);
-    const row = this.dbService.db
-      .prepare<
-        [number],
-        { content: string; updated_at: number }
-      >('SELECT content, updated_at FROM plots WHERE project_id = ?')
-      .get(projectId);
-    if (!row) {
-      const now = Date.now();
-      const content = this.defaultTemplate();
-      this.dbService.db
-        .prepare(
-          'INSERT INTO plots (project_id, content, updated_at) VALUES (?, ?, ?)',
-        )
-        .run(projectId, content, now);
-      return { content, updatedAt: new Date(now) };
-    }
-    return { content: row.content, updatedAt: new Date(row.updated_at) };
+  findOne(projectPath: string): Plot | null {
+    const projectId = this.resolveProjectIdOrThrow(projectPath);
+    return this.repo.findByProjectId(projectId);
   }
 
-  applyDiffForProject(
-    projectPath: string,
-    unifiedDiff: string,
-  ): PlotUpdateResult {
-    const projectId = this.resolveProjectId(projectPath);
+  update(updatePlotDto: UpdatePlotDto): Plot {
+    const projectId = this.resolveProjectIdOrThrow(updatePlotDto.project);
+    const unifiedDiff = updatePlotDto.diff;
     if (!HEADER_FROM_RE.test(unifiedDiff) || !HEADER_TO_RE.test(unifiedDiff)) {
       throw new PlotServiceError('invalid_diff_headers');
     }
 
-    const current = this.getForProject(projectPath);
+    const current = this.repo.findByProjectId(projectId);
+    if (!current) throw new PlotServiceError('no_current_content');
 
     let parsed;
     try {
@@ -117,20 +93,13 @@ export class PlotService implements OnModuleInit {
       throw new PlotServiceError('hunk_mismatch', detail);
     }
 
-    const now = Date.now();
-    const db = this.dbService.db;
-    const tx = db.transaction(
-      (pid: number, content: string, diff: string, ts: number) => {
-        db.prepare(
-          'INSERT INTO plot_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
-        ).run(pid, content, diff, ts);
-        db.prepare(
-          'UPDATE plots SET content = ?, updated_at = ? WHERE project_id = ?',
-        ).run(content, ts, pid);
-      },
-    );
-    tx.immediate(projectId, updated, unifiedDiff, now);
-
-    return { updatedAt: new Date(now) };
+    this.repo.applyDiff(projectId, {
+      unifiedDiff,
+      newContent: updated,
+      now: Date.now(),
+    });
+    const after = this.repo.findByProjectId(projectId);
+    if (!after) throw new PlotServiceError('no_current_content');
+    return after;
   }
 }

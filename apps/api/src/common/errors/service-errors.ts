@@ -20,6 +20,7 @@ export class PlotServiceError extends Error {
       | 'invalid_diff_headers'
       | 'parse_failed'
       | 'hunk_mismatch'
+      | 'no_current_content'
       | 'project_not_found',
     public readonly detail?: string,
   ) {
