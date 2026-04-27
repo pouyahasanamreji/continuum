@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { applyPatch, parsePatch } from 'diff';
-import { OrchestratorDbService } from '../database/orchestrator-db.service';
 import { ProjectRepository } from '../project/infrastructure/persistence/project.repository';
 import { KnowledgeUpdateError } from '../common/errors/service-errors';
+import { KnowledgeRepository } from './infrastructure/persistence/knowledge.repository';
 
 const HEADER_FROM_RE = /^---\s+a\/knowledge\.md(\s|$)/m;
 const HEADER_TO_RE = /^\+\+\+\s+b\/knowledge\.md(\s|$)/m;
@@ -19,7 +19,7 @@ export interface KnowledgeUpdateResult {
 @Injectable()
 export class KnowledgeService {
   constructor(
-    private readonly dbService: OrchestratorDbService,
+    private readonly repo: KnowledgeRepository,
     private readonly projectRepo: ProjectRepository,
   ) {}
 
@@ -33,22 +33,8 @@ export class KnowledgeService {
 
   getAll(projectPath: string): KnowledgeReadResult | null {
     const projectId = this.resolveProjectId(projectPath);
-    const row = this.dbService.db
-      .prepare<
-        [number],
-        {
-          content: string;
-          created_at: number;
-          updated_at: number;
-          deleted_at: number | null;
-        }
-      >(
-        'SELECT content, created_at, updated_at, deleted_at FROM knowledge WHERE project_id = ? AND deleted_at IS NULL',
-      )
-      .get(projectId);
-    return row
-      ? { content: row.content, updatedAt: new Date(row.updated_at) }
-      : null;
+    const k = this.repo.findByProjectId(projectId);
+    return k ? { content: k.content, updatedAt: k.updatedAt } : null;
   }
 
   getSection(projectPath: string, title: string): string | null {
@@ -80,7 +66,7 @@ export class KnowledgeService {
       throw new KnowledgeUpdateError('invalid_diff_headers');
     }
 
-    const current = this.getAll(projectPath);
+    const current = this.repo.findByProjectId(projectId);
     if (!current) throw new KnowledgeUpdateError('no_current_content');
 
     let parsed;
@@ -106,30 +92,16 @@ export class KnowledgeService {
     }
 
     const now = Date.now();
-    const db = this.dbService.db;
-    const tx = db.transaction(
-      (pid: number, content: string, diff: string, ts: number) => {
-        db.prepare(
-          'INSERT INTO knowledge_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
-        ).run(pid, content, diff, ts);
-        db.prepare(
-          'UPDATE knowledge SET content = ?, updated_at = ? WHERE project_id = ? AND deleted_at IS NULL',
-        ).run(content, ts, pid);
-      },
-    );
-    tx.immediate(projectId, updated, unifiedDiff, now);
-
+    this.repo.applyDiff(projectId, {
+      unifiedDiff,
+      newContent: updated,
+      now,
+    });
     return { updatedAt: new Date(now) };
   }
 
   set(projectPath: string, content: string): void {
     const projectId = this.resolveProjectId(projectPath);
-    const now = Date.now();
-    this.dbService.db
-      .prepare(
-        `INSERT INTO knowledge (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT(project_id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
-      )
-      .run(projectId, content, now, now);
+    this.repo.upsert(projectId, content, Date.now());
   }
 }
