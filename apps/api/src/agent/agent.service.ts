@@ -35,32 +35,35 @@ export class AgentService {
     private readonly dbs: OrchestratorDbService,
   ) {}
 
-  private assertProjectExistsInline(projectPath: string): void {
+  private resolveProjectIdInline(projectPath: string): number {
     const row = this.dbs.db
       .prepare<
         [string],
-        { _: number }
-      >('SELECT 1 AS _ FROM projects WHERE path = ?')
+        { id: number }
+      >(
+        'SELECT id FROM projects WHERE path = ? AND deleted_at IS NULL',
+      )
       .get(projectPath);
     if (!row) throw new AgentServiceError('project_not_found', projectPath);
+    return row.id;
   }
 
   list(projectPath: string): Agent[] {
-    this.assertProjectExistsInline(projectPath);
-    return this.repo.list(projectPath);
+    const projectId = this.resolveProjectIdInline(projectPath);
+    return this.repo.list(projectId);
   }
 
   get(projectPath: string, slug: string): Agent | null {
-    this.assertProjectExistsInline(projectPath);
-    return this.repo.findBySlug(projectPath, slug);
+    const projectId = this.resolveProjectIdInline(projectPath);
+    return this.repo.findBySlug(projectId, slug);
   }
 
   create(projectPath: string, input: AgentCreateInput): Agent {
-    this.assertProjectExistsInline(projectPath);
+    const projectId = this.resolveProjectIdInline(projectPath);
     if (!SLUG_RE.test(input.slug)) {
       throw new AgentServiceError('invalid_slug', input.slug);
     }
-    const result = this.repo.create(projectPath, {
+    const result = this.repo.create(projectId, {
       slug: input.slug,
       branch: input.branch,
       worktree: input.worktree,
@@ -78,8 +81,8 @@ export class AgentService {
   }
 
   update(projectPath: string, slug: string, patch: AgentUpdateInput): Agent {
-    this.assertProjectExistsInline(projectPath);
-    const existing = this.repo.findBySlug(projectPath, slug);
+    const projectId = this.resolveProjectIdInline(projectPath);
+    const existing = this.repo.findBySlug(projectId, slug);
     if (!existing) throw new AgentServiceError('not_found', slug);
 
     const now = Date.now();
@@ -141,8 +144,8 @@ export class AgentService {
 
     if (!touched) throw new AgentServiceError('no_change', slug);
 
-    this.repo.update(projectPath, slug, out);
-    const updated = this.repo.findBySlug(projectPath, slug);
+    this.repo.update(projectId, slug, out);
+    const updated = this.repo.findBySlug(projectId, slug);
     if (!updated) throw new AgentServiceError('not_found', slug);
     return updated;
   }
@@ -152,6 +155,7 @@ export class AgentService {
     slug: string,
     payload: AgentMigrationPayload,
   ): void {
-    this.repo.upsertFromMigration(projectPath, slug, payload);
+    const projectId = this.resolveProjectIdInline(projectPath);
+    this.repo.upsertFromMigration(projectId, slug, payload);
   }
 }

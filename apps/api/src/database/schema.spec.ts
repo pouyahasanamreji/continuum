@@ -1,15 +1,15 @@
 import Database from 'better-sqlite3';
-import { migrate } from './schema';
+import { migrate, SCHEMA_VERSION } from './schema';
 
 describe('migrate idempotency', () => {
-  it('two migrate calls on fresh DB then a third leaves user_version=2 with empty tables', () => {
+  it(`two migrate calls on fresh DB then a third leaves user_version=${SCHEMA_VERSION} with empty tables`, () => {
     const db = new Database(':memory:');
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     migrate(db);
     migrate(db);
     migrate(db);
-    expect(db.pragma('user_version', { simple: true })).toBe(2);
+    expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
     for (const t of [
       'projects',
       'plots',

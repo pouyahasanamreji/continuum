@@ -1,47 +1,52 @@
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
-  path TEXT PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  path TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER NULL
 );
 
 CREATE TABLE IF NOT EXISTS plots (
-  project_path TEXT PRIMARY KEY REFERENCES projects(path) ON DELETE CASCADE,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS plot_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  project_path TEXT NOT NULL REFERENCES projects(path) ON DELETE CASCADE,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   applied_diff TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_plot_history_project ON plot_history(project_path);
+CREATE INDEX IF NOT EXISTS idx_plot_history_project ON plot_history(project_id);
 
 CREATE TABLE IF NOT EXISTS knowledge (
-  project_path TEXT PRIMARY KEY REFERENCES projects(path) ON DELETE CASCADE,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS knowledge_history (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  project_path TEXT NOT NULL REFERENCES projects(path) ON DELETE CASCADE,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
   applied_diff TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_knowledge_history_project ON knowledge_history(project_path);
+CREATE INDEX IF NOT EXISTS idx_knowledge_history_project ON knowledge_history(project_id);
 
 CREATE TABLE IF NOT EXISTS agents (
-  project_path TEXT NOT NULL REFERENCES projects(path) ON DELETE CASCADE,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   slug TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('draft','active','merged','abandoned')),
   branch TEXT NOT NULL,
@@ -58,9 +63,10 @@ CREATE TABLE IF NOT EXISTS agents (
   merged_at INTEGER NULL,
   merged_commit TEXT NULL CHECK (merged_commit IS NULL OR length(merged_commit) >= 7),
   abandoned_reason TEXT NULL,
-  PRIMARY KEY (project_path, slug)
+  deleted_at INTEGER NULL,
+  UNIQUE(project_id, slug)
 );
-CREATE INDEX IF NOT EXISTS idx_agents_project_status ON agents(project_path, status);
+CREATE INDEX IF NOT EXISTS idx_agents_project_status ON agents(project_id, status);
 `;
 
 const DROP_LEGACY_SQL = `

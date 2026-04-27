@@ -1,7 +1,7 @@
 export type AgentStatus = 'draft' | 'active' | 'merged' | 'abandoned';
 
 export class Agent {
-  projectPath!: string;
+  projectId!: number;
   slug!: string;
   status!: AgentStatus;
   branch!: string;

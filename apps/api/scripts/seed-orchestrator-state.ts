@@ -151,27 +151,35 @@ function main(): void {
        ON CONFLICT(path) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`,
     ).run(PROJECT_PATH, PROJECT_NAME, now, now);
 
-    db.prepare(
-      `INSERT INTO plots (project_path, content, updated_at) VALUES (?, ?, ?)
-       ON CONFLICT(project_path) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
-    ).run(PROJECT_PATH, plotContent, now);
+    const projectId = (
+      db
+        .prepare<[string], { id: number }>(
+          'SELECT id FROM projects WHERE path = ?',
+        )
+        .get(PROJECT_PATH) as { id: number }
+    ).id;
 
     db.prepare(
-      `INSERT INTO knowledge (project_path, content, updated_at) VALUES (?, ?, ?)
-       ON CONFLICT(project_path) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
-    ).run(PROJECT_PATH, knowledgeContent, now);
+      `INSERT INTO plots (project_id, content, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(project_id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
+    ).run(projectId, plotContent, now);
+
+    db.prepare(
+      `INSERT INTO knowledge (project_id, content, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(project_id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
+    ).run(projectId, knowledgeContent, now);
 
     const upsert = db.prepare(`
       INSERT INTO agents (
-        project_path, slug, status, branch, worktree, reserved_paths_json,
+        project_id, slug, status, branch, worktree, reserved_paths_json,
         request, plan, impl_prompt, coordination_brief, post_merge_notes,
         created_at, dispatched_at, updated_at, merged_at, merged_commit, abandoned_reason
       ) VALUES (
-        @project_path, @slug, @status, @branch, @worktree, @reserved_paths_json,
+        @project_id, @slug, @status, @branch, @worktree, @reserved_paths_json,
         @request, @plan, @impl_prompt, @coordination_brief, @post_merge_notes,
         @created_at, @dispatched_at, @updated_at, @merged_at, @merged_commit, @abandoned_reason
       )
-      ON CONFLICT(project_path, slug) DO UPDATE SET
+      ON CONFLICT(project_id, slug) DO UPDATE SET
         status = excluded.status,
         branch = excluded.branch,
         worktree = excluded.worktree,
@@ -209,7 +217,7 @@ function main(): void {
       const mergedAt = validStatus === 'merged' ? (dispatchedAt ?? now) : null;
 
       upsert.run({
-        project_path: PROJECT_PATH,
+        project_id: projectId,
         slug: entry.slug,
         status: validStatus,
         branch: doc.branch ?? '',

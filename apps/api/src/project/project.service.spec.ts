@@ -14,6 +14,7 @@ function makeService(): {
   service: ProjectService;
   db: Database.Database;
   agents: () => number;
+  idOf: (path: string) => number;
 } {
   const db = new Database(':memory:');
   db.pragma('journal_mode = WAL');
@@ -33,6 +34,12 @@ function makeService(): {
     db,
     agents: () =>
       (db.prepare('SELECT COUNT(*) AS c FROM agents').get() as { c: number }).c,
+    idOf: (path: string) =>
+      (
+        db
+          .prepare('SELECT id FROM projects WHERE path = ?')
+          .get(path) as { id: number }
+      ).id,
   };
 }
 
@@ -102,19 +109,20 @@ describe('ProjectService.canonicalize', () => {
 
 describe('ProjectService.create', () => {
   it('inserts project + plot (default template) + empty knowledge', () => {
-    const { service, db } = makeService();
+    const { service, db, idOf } = makeService();
     const created = service.create({ path: '/Users/foo/proj' });
     expect(created.path).toBe('/Users/foo/proj');
     expect(created.name).toBe('proj');
 
+    const id = idOf('/Users/foo/proj');
     const plotRow = db
-      .prepare('SELECT content FROM plots WHERE project_path = ?')
-      .get('/Users/foo/proj') as { content: string };
+      .prepare('SELECT content FROM plots WHERE project_id = ?')
+      .get(id) as { content: string };
     expect(plotRow.content).toBe('# default plot template');
 
     const kRow = db
-      .prepare('SELECT content FROM knowledge WHERE project_path = ?')
-      .get('/Users/foo/proj') as { content: string };
+      .prepare('SELECT content FROM knowledge WHERE project_id = ?')
+      .get(id) as { content: string };
     expect(kRow.content).toBe('');
   });
 
@@ -146,31 +154,32 @@ describe('ProjectService.create', () => {
 
 describe('ProjectService.delete', () => {
   it('cascades plot/plot_history/knowledge/knowledge_history/agents', () => {
-    const { service, db, agents } = makeService();
+    const { service, db, agents, idOf } = makeService();
     const path = '/Users/foo/proj';
     service.create({ path });
+    const id = idOf(path);
 
     const now = Date.now();
     db.prepare(
-      'INSERT INTO plot_history (project_path, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
-    ).run(path, 'old', 'diff', now);
+      'INSERT INTO plot_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
+    ).run(id, 'old', 'diff', now);
     db.prepare(
-      'INSERT INTO knowledge_history (project_path, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
-    ).run(path, 'old', 'diff', now);
+      'INSERT INTO knowledge_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
+    ).run(id, 'old', 'diff', now);
     db.prepare(
       `INSERT INTO agents (
-        project_path, slug, status, branch, worktree, reserved_paths_json,
+        project_id, slug, status, branch, worktree, reserved_paths_json,
         request, plan, impl_prompt, coordination_brief, post_merge_notes,
         created_at, updated_at
       ) VALUES (?, ?, 'draft', ?, ?, '[]', ?, ?, ?, ?, '', ?, ?)`,
-    ).run(path, 'a1', 'feat/a1', '/tmp/wt', '', '', '', '', now, now);
+    ).run(id, 'a1', 'feat/a1', '/tmp/wt', '', '', '', '', now, now);
     db.prepare(
       `INSERT INTO agents (
-        project_path, slug, status, branch, worktree, reserved_paths_json,
+        project_id, slug, status, branch, worktree, reserved_paths_json,
         request, plan, impl_prompt, coordination_brief, post_merge_notes,
         created_at, updated_at
       ) VALUES (?, ?, 'draft', ?, ?, '[]', ?, ?, ?, ?, '', ?, ?)`,
-    ).run(path, 'a2', 'feat/a2', '/tmp/wt', '', '', '', '', now, now);
+    ).run(id, 'a2', 'feat/a2', '/tmp/wt', '', '', '', '', now, now);
 
     expect(agents()).toBe(2);
 
@@ -181,33 +190,33 @@ describe('ProjectService.delete', () => {
     expect(
       (
         db
-          .prepare('SELECT COUNT(*) AS c FROM plots WHERE project_path = ?')
-          .get(path) as { c: number }
+          .prepare('SELECT COUNT(*) AS c FROM plots WHERE project_id = ?')
+          .get(id) as { c: number }
       ).c,
     ).toBe(0);
     expect(
       (
         db
           .prepare(
-            'SELECT COUNT(*) AS c FROM plot_history WHERE project_path = ?',
+            'SELECT COUNT(*) AS c FROM plot_history WHERE project_id = ?',
           )
-          .get(path) as { c: number }
+          .get(id) as { c: number }
       ).c,
     ).toBe(0);
     expect(
       (
         db
-          .prepare('SELECT COUNT(*) AS c FROM knowledge WHERE project_path = ?')
-          .get(path) as { c: number }
+          .prepare('SELECT COUNT(*) AS c FROM knowledge WHERE project_id = ?')
+          .get(id) as { c: number }
       ).c,
     ).toBe(0);
     expect(
       (
         db
           .prepare(
-            'SELECT COUNT(*) AS c FROM knowledge_history WHERE project_path = ?',
+            'SELECT COUNT(*) AS c FROM knowledge_history WHERE project_id = ?',
           )
-          .get(path) as { c: number }
+          .get(id) as { c: number }
       ).c,
     ).toBe(0);
     expect(agents()).toBe(0);

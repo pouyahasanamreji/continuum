@@ -1,7 +1,8 @@
 import type { AgentStatus } from '../../../../domain/agent';
 
 export interface AgentEntity {
-  project_path: string;
+  id: number;
+  project_id: number;
   slug: string;
   status: AgentStatus;
   branch: string;
@@ -18,4 +19,5 @@ export interface AgentEntity {
   merged_at: number | null;
   merged_commit: string | null;
   abandoned_reason: string | null;
+  deleted_at: number | null;
 }

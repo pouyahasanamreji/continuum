@@ -4,7 +4,7 @@ import { AgentEntity } from '../entities/agent.entity';
 export class AgentMapper {
   static toDomain(raw: AgentEntity): Agent {
     const a = new Agent();
-    a.projectPath = raw.project_path;
+    a.projectId = raw.project_id;
     a.slug = raw.slug;
     a.status = raw.status;
     a.branch = raw.branch;

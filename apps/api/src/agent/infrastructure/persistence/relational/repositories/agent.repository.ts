@@ -17,38 +17,42 @@ export class AgentRelationalRepository extends AgentRepository {
     super();
   }
 
-  list(projectPath: string): Agent[] {
+  list(projectId: number): Agent[] {
     const rows = this.dbs.db
       .prepare<
-        [string],
+        [number],
         AgentEntity
-      >('SELECT * FROM agents WHERE project_path = ? ORDER BY created_at DESC')
-      .all(projectPath);
+      >(
+        'SELECT * FROM agents WHERE project_id = ? AND deleted_at IS NULL ORDER BY created_at DESC',
+      )
+      .all(projectId);
     return rows.map((r) => AgentMapper.toDomain(r));
   }
 
-  findBySlug(projectPath: string, slug: string): Agent | null {
+  findBySlug(projectId: number, slug: string): Agent | null {
     const row = this.dbs.db
       .prepare<
-        [string, string],
+        [number, string],
         AgentEntity
-      >('SELECT * FROM agents WHERE project_path = ? AND slug = ?')
-      .get(projectPath, slug);
+      >(
+        'SELECT * FROM agents WHERE project_id = ? AND slug = ? AND deleted_at IS NULL',
+      )
+      .get(projectId, slug);
     return row ? AgentMapper.toDomain(row) : null;
   }
 
-  create(projectPath: string, payload: AgentCreatePayload): AgentCreateResult {
+  create(projectId: number, payload: AgentCreatePayload): AgentCreateResult {
     try {
       this.dbs.db
         .prepare(
           `INSERT INTO agents (
-             project_path, slug, status, branch, worktree, reserved_paths_json,
+             project_id, slug, status, branch, worktree, reserved_paths_json,
              request, plan, impl_prompt, coordination_brief, post_merge_notes,
              created_at, updated_at
            ) VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, '', ?, ?)`,
         )
         .run(
-          projectPath,
+          projectId,
           payload.slug,
           payload.branch,
           payload.worktree,
@@ -67,16 +71,16 @@ export class AgentRelationalRepository extends AgentRepository {
       }
       throw err;
     }
-    const created = this.findBySlug(projectPath, payload.slug);
+    const created = this.findBySlug(projectId, payload.slug);
     if (!created) {
       throw new Error(
-        `agent ${payload.slug} not found after insert (project=${projectPath})`,
+        `agent ${payload.slug} not found after insert (project_id=${projectId})`,
       );
     }
     return { ok: true, agent: created };
   }
 
-  update(projectPath: string, slug: string, patch: AgentUpdatePatch): void {
+  update(projectId: number, slug: string, patch: AgentUpdatePatch): void {
     const sets: string[] = ['updated_at = ?'];
     const params: (string | number | null)[] = [patch.updatedAt];
 
@@ -109,39 +113,39 @@ export class AgentRelationalRepository extends AgentRepository {
       params.push(patch.postMergeNotes);
     }
 
-    params.push(projectPath, slug);
+    params.push(projectId, slug);
     this.dbs.db
       .prepare(
-        `UPDATE agents SET ${sets.join(', ')} WHERE project_path = ? AND slug = ?`,
+        `UPDATE agents SET ${sets.join(', ')} WHERE project_id = ? AND slug = ?`,
       )
       .run(...params);
   }
 
   upsertFromMigration(
-    projectPath: string,
+    projectId: number,
     slug: string,
     payload: AgentMigrationPayload,
   ): void {
     const existing = this.dbs.db
       .prepare<
-        [string, string],
+        [number, string],
         { created_at: number }
-      >('SELECT created_at FROM agents WHERE project_path = ? AND slug = ?')
-      .get(projectPath, slug);
+      >('SELECT created_at FROM agents WHERE project_id = ? AND slug = ?')
+      .get(projectId, slug);
 
     this.dbs.db
       .prepare(
         `
       INSERT INTO agents (
-        project_path, slug, status, branch, worktree, reserved_paths_json,
+        project_id, slug, status, branch, worktree, reserved_paths_json,
         request, plan, impl_prompt, coordination_brief, post_merge_notes,
         created_at, dispatched_at, updated_at, merged_at, merged_commit, abandoned_reason
       ) VALUES (
-        @project_path, @slug, @status, @branch, @worktree, @reserved_paths_json,
+        @project_id, @slug, @status, @branch, @worktree, @reserved_paths_json,
         @request, @plan, @impl_prompt, @coordination_brief, @post_merge_notes,
         @created_at, @dispatched_at, @updated_at, @merged_at, @merged_commit, @abandoned_reason
       )
-      ON CONFLICT(project_path, slug) DO UPDATE SET
+      ON CONFLICT(project_id, slug) DO UPDATE SET
         status = excluded.status,
         branch = excluded.branch,
         worktree = excluded.worktree,
@@ -159,7 +163,7 @@ export class AgentRelationalRepository extends AgentRepository {
     `,
       )
       .run({
-        project_path: projectPath,
+        project_id: projectId,
         slug,
         status: payload.status,
         branch: payload.branch,

@@ -46,19 +46,19 @@ export type AgentCreateResult =
   | { ok: false; reason: 'slug_conflict' };
 
 export abstract class AgentRepository {
-  abstract list(projectPath: string): Agent[];
-  abstract findBySlug(projectPath: string, slug: string): Agent | null;
+  abstract list(projectId: number): Agent[];
+  abstract findBySlug(projectId: number, slug: string): Agent | null;
   abstract create(
-    projectPath: string,
+    projectId: number,
     payload: AgentCreatePayload,
   ): AgentCreateResult;
   abstract update(
-    projectPath: string,
+    projectId: number,
     slug: string,
     patch: AgentUpdatePatch,
   ): void;
   abstract upsertFromMigration(
-    projectPath: string,
+    projectId: number,
     slug: string,
     payload: AgentMigrationPayload,
   ): void;

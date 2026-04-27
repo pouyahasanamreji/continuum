@@ -19,24 +19,27 @@ export interface KnowledgeUpdateResult {
 export class KnowledgeService {
   constructor(private readonly dbService: OrchestratorDbService) {}
 
-  private assertProjectExistsInline(projectPath: string): void {
+  private resolveProjectIdInline(projectPath: string): number {
     const row = this.dbService.db
       .prepare<
         [string],
-        { _: number }
-      >('SELECT 1 AS _ FROM projects WHERE path = ?')
+        { id: number }
+      >(
+        'SELECT id FROM projects WHERE path = ? AND deleted_at IS NULL',
+      )
       .get(projectPath);
     if (!row) throw new KnowledgeUpdateError('project_not_found', projectPath);
+    return row.id;
   }
 
   getAll(projectPath: string): KnowledgeReadResult | null {
-    this.assertProjectExistsInline(projectPath);
+    const projectId = this.resolveProjectIdInline(projectPath);
     const row = this.dbService.db
       .prepare<
-        [string],
+        [number],
         { content: string; updated_at: number }
-      >('SELECT content, updated_at FROM knowledge WHERE project_path = ?')
-      .get(projectPath);
+      >('SELECT content, updated_at FROM knowledge WHERE project_id = ?')
+      .get(projectId);
     return row ? { content: row.content, updatedAt: row.updated_at } : null;
   }
 
@@ -64,7 +67,7 @@ export class KnowledgeService {
   }
 
   applyDiff(projectPath: string, unifiedDiff: string): KnowledgeUpdateResult {
-    this.assertProjectExistsInline(projectPath);
+    const projectId = this.resolveProjectIdInline(projectPath);
     if (!HEADER_FROM_RE.test(unifiedDiff) || !HEADER_TO_RE.test(unifiedDiff)) {
       throw new KnowledgeUpdateError('invalid_diff_headers');
     }
@@ -97,28 +100,28 @@ export class KnowledgeService {
     const now = Date.now();
     const db = this.dbService.db;
     const tx = db.transaction(
-      (proj: string, content: string, diff: string, ts: number) => {
+      (pid: number, content: string, diff: string, ts: number) => {
         db.prepare(
-          'INSERT INTO knowledge_history (project_path, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
-        ).run(proj, content, diff, ts);
+          'INSERT INTO knowledge_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
+        ).run(pid, content, diff, ts);
         db.prepare(
-          'UPDATE knowledge SET content = ?, updated_at = ? WHERE project_path = ?',
-        ).run(content, ts, proj);
+          'UPDATE knowledge SET content = ?, updated_at = ? WHERE project_id = ?',
+        ).run(content, ts, pid);
       },
     );
-    tx.immediate(projectPath, updated, unifiedDiff, now);
+    tx.immediate(projectId, updated, unifiedDiff, now);
 
     return { updatedAt: now };
   }
 
   set(projectPath: string, content: string): void {
-    this.assertProjectExistsInline(projectPath);
+    const projectId = this.resolveProjectIdInline(projectPath);
     const now = Date.now();
     this.dbService.db
       .prepare(
-        `INSERT INTO knowledge (project_path, content, updated_at) VALUES (?, ?, ?)
-         ON CONFLICT(project_path) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
+        `INSERT INTO knowledge (project_id, content, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(project_id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
       )
-      .run(projectPath, content, now);
+      .run(projectId, content, now);
   }
 }

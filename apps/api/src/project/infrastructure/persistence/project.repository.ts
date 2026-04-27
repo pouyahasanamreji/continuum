@@ -16,6 +16,7 @@ export type ProjectCreateResult =
 
 export abstract class ProjectRepository {
   abstract list(): Project[];
+  abstract findIdByPath(path: string): number | null;
   abstract findByPath(path: string): Project | null;
   abstract exists(path: string): boolean;
   abstract create(payload: ProjectCreatePayload): ProjectCreateResult;
