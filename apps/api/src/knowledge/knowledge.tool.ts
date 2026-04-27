@@ -32,31 +32,23 @@ export class KnowledgeTool {
   })
   knowledgeGet(args: GetKnowledgeDto) {
     try {
-      if (args.section) {
-        const section = this.knowledge.getSection(args.project, args.section);
-        if (section === null) {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Section "${args.section}" not found.`,
-              },
-            ],
-            isError: true,
-          };
-        }
-        return { content: [{ type: 'text' as const, text: section }] };
-      }
-      const all = this.knowledge.getAll(args.project);
-      if (!all) {
+      const found = args.section
+        ? this.knowledge.findBySection(args.project, args.section)
+        : this.knowledge.findOne(args.project);
+      if (!found) {
         return {
           content: [
-            { type: 'text' as const, text: 'Knowledge document is empty.' },
+            {
+              type: 'text' as const,
+              text: args.section
+                ? `Section "${args.section}" not found.`
+                : 'Knowledge document is empty.',
+            },
           ],
           isError: true,
         };
       }
-      return { content: [{ type: 'text' as const, text: all.content }] };
+      return { content: [{ type: 'text' as const, text: found.content }] };
     } catch (e) {
       return toolError(e);
     }
@@ -70,7 +62,10 @@ export class KnowledgeTool {
   })
   knowledgeUpdate(args: UpdateKnowledgeInput) {
     try {
-      const result = this.knowledge.applyDiff(args.project, args.diff);
+      const result = this.knowledge.update({
+        project: args.project,
+        diff: args.diff,
+      });
       return {
         content: [
           {

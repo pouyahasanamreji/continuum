@@ -1,14 +1,24 @@
 import {
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   NotFoundException,
   Query,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { ApiOkResponse, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { KnowledgeService } from './knowledge.service';
 import { Knowledge } from './domain/knowledge';
+import { QueryKnowledgeDto } from './dto/query-knowledge.dto';
 import { mapServiceError } from '../common/errors/map-service-error';
+
+function missingProject(): never {
+  throw new UnprocessableEntityException({
+    status: 422,
+    errors: { project: 'missingProjectQuery' },
+  });
+}
 
 @ApiTags('Knowledge')
 @Controller('api/orchestrator')
@@ -16,36 +26,23 @@ export class KnowledgeController {
   constructor(private readonly knowledge: KnowledgeService) {}
 
   @Get('knowledge')
-  @ApiQuery({ name: 'project', type: String, required: true })
-  @ApiQuery({ name: 'section', type: String, required: false })
+  @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: Knowledge })
-  getKnowledge(
-    @Query('project') project?: string,
-    @Query('section') section?: string,
-  ) {
-    if (!project) {
-      throw new UnprocessableEntityException({
-        status: 422,
-        errors: { project: 'missingProjectQuery' },
-      });
-    }
+  getKnowledge(@Query() query: QueryKnowledgeDto): Knowledge {
+    if (!query.project) missingProject();
     try {
-      if (section) {
-        const text = this.knowledge.getSection(project, section);
-        if (text === null)
-          throw new NotFoundException({
-            status: 404,
-            errors: { section: 'sectionNotFound' },
-          });
-        return { content: text, section };
-      }
-      const all = this.knowledge.getAll(project);
-      if (!all)
+      const found = query.section
+        ? this.knowledge.findBySection(query.project, query.section)
+        : this.knowledge.findOne(query.project);
+      if (!found) {
         throw new NotFoundException({
           status: 404,
-          errors: { knowledge: 'knowledgeNotFound' },
+          errors: query.section
+            ? { section: 'sectionNotFound' }
+            : { knowledge: 'knowledgeNotFound' },
         });
-      return all;
+      }
+      return found;
     } catch (e) {
       if (e instanceof NotFoundException) throw e;
       mapServiceError(e);
