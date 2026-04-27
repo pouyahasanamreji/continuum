@@ -16,6 +16,6 @@ const restEnabled = process.env.PANEL_REST_ENABLED === 'true';
   ],
   controllers: restEnabled ? [KnowledgeController] : [],
   providers: [KnowledgeService, KnowledgeTool],
-  exports: [KnowledgeService],
+  exports: [KnowledgeService, RelationalKnowledgePersistenceModule],
 })
 export class KnowledgeModule {}
