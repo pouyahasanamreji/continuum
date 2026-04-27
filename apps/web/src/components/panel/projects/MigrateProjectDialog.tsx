@@ -30,16 +30,14 @@ interface MigrationBody {
   agents?: Array<{ slug: string; content: string }>;
 }
 
-interface RootPick {
-  rootName: string | null;
+interface Picked {
   plotContent: string | null;
-}
-
-interface StatePick {
-  rootName: string | null;
   knowledgeContent: string | null;
   agents: Array<{ slug: string; content: string }>;
   rejected: string[];
+  rootName: string | null;
+  fileCount: number;
+  warnDotfileStrip: boolean;
 }
 
 interface Props {
@@ -51,16 +49,10 @@ interface Props {
 const SLUG_FILE_RE = /^[a-z][a-z0-9-]*\.md$/;
 const MAX_FILES = 5000;
 
-function rootSegment(path: string): string {
-  const i = path.indexOf("/");
-  return i === -1 ? path : path.slice(0, i);
-}
-
 export function MigrateProjectDialog({ open, onOpenChange, onMigrated }: Props) {
   const [path, setPath] = useState("");
   const [name, setName] = useState("");
-  const [rootPick, setRootPick] = useState<RootPick | null>(null);
-  const [statePick, setStatePick] = useState<StatePick | null>(null);
+  const [picked, setPicked] = useState<Picked | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<MigrationResult | null>(null);
@@ -68,100 +60,100 @@ export function MigrateProjectDialog({ open, onOpenChange, onMigrated }: Props) 
   const reset = () => {
     setPath("");
     setName("");
-    setRootPick(null);
-    setStatePick(null);
+    setPicked(null);
     setBusy(false);
     setError(null);
     setResult(null);
   };
 
-  const onRootPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    setError(null);
+  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) {
-      setRootPick({ rootName: null, plotContent: null });
+      setError("No files selected (or browser denied permission).");
+      setPicked(null);
       return;
     }
     if (files.length > MAX_FILES) {
       setError(
         `Folder contains ${files.length} files (limit ${MAX_FILES}). Pick a tighter folder.`,
       );
-      setRootPick(null);
+      setPicked(null);
       return;
     }
-    let plotContent: string | null = null;
-    let rootName: string | null = null;
-    for (const f of Array.from(files)) {
-      const rel = f.webkitRelativePath;
-      if (!rel) continue;
-      if (rootName === null) rootName = rootSegment(rel);
-      const root = rootName;
-      if (root && rel === `${root}/PLOT.md`) {
-        plotContent = await f.text();
-      }
-    }
-    setRootPick({ rootName, plotContent });
-  };
+    setError(null);
 
-  const onStatePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    setError(null);
-    const files = e.target.files;
-    if (!files || files.length === 0) {
-      setStatePick({
-        rootName: null,
-        knowledgeContent: null,
-        agents: [],
-        rejected: [],
-      });
-      setError(
-        "Empty folder (or browser denied permission). Try selecting the folder again.",
-      );
-      return;
-    }
-    if (files.length > MAX_FILES) {
-      setError(
-        `Folder contains ${files.length} files (limit ${MAX_FILES}). Pick a tighter folder.`,
-      );
-      setStatePick(null);
-      return;
-    }
+    let plotContent: string | null = null;
     let knowledgeContent: string | null = null;
-    let rootName: string | null = null;
     const agents: Array<{ slug: string; content: string }> = [];
     const rejected: string[] = [];
-    for (const f of Array.from(files)) {
-      const rel = f.webkitRelativePath;
+    let rootName: string | null = null;
+    let sawAnyOrchestratorFile = false;
+
+    for (const file of Array.from(files)) {
+      const rel = file.webkitRelativePath;
       if (!rel) continue;
-      if (rootName === null) rootName = rootSegment(rel);
-      const root = rootName;
-      if (!root) continue;
-      if (rel === `${root}/knowledge.md`) {
-        knowledgeContent = await f.text();
+      const segments = rel.split("/");
+      if (rootName === null) rootName = segments[0] ?? null;
+      const tail = segments.slice(1);
+
+      if (tail.length === 1 && tail[0] === "PLOT.md") {
+        plotContent = await file.text();
         continue;
       }
-      const agentPrefix = `${root}/agents/`;
-      if (rel.startsWith(agentPrefix)) {
-        const filename = rel.slice(agentPrefix.length);
-        if (filename.includes("/")) continue;
-        if (!SLUG_FILE_RE.test(filename)) {
-          if (filename.endsWith(".md")) rejected.push(filename);
+
+      if (
+        tail.length === 2 &&
+        tail[0] === ".orchestrator" &&
+        tail[1] === "knowledge.md"
+      ) {
+        knowledgeContent = await file.text();
+        sawAnyOrchestratorFile = true;
+        continue;
+      }
+
+      if (
+        tail.length === 3 &&
+        tail[0] === ".orchestrator" &&
+        tail[1] === "agents"
+      ) {
+        const basename = tail[2]!;
+        if (basename === "REGISTRY.md") {
+          sawAnyOrchestratorFile = true;
           continue;
         }
-        const slug = filename.slice(0, -3);
-        agents.push({ slug, content: await f.text() });
+        if (SLUG_FILE_RE.test(basename)) {
+          const content = await file.text();
+          agents.push({ slug: basename.replace(/\.md$/, ""), content });
+          sawAnyOrchestratorFile = true;
+        } else if (basename.endsWith(".md")) {
+          rejected.push(basename);
+          sawAnyOrchestratorFile = true;
+        }
+        continue;
       }
     }
-    setStatePick({ rootName, knowledgeContent, agents, rejected });
+
+    const warnDotfileStrip = plotContent !== null && !sawAnyOrchestratorFile;
+
+    setPicked({
+      plotContent,
+      knowledgeContent,
+      agents,
+      rejected,
+      rootName,
+      fileCount: files.length,
+      warnDotfileStrip,
+    });
   };
 
   const submitDisabled =
     busy ||
     path.trim() === "" ||
+    !picked ||
     !(
-      rootPick?.plotContent !== undefined && rootPick?.plotContent !== null ||
-      statePick?.knowledgeContent !== undefined &&
-        statePick?.knowledgeContent !== null ||
-      (statePick?.agents.length ?? 0) > 0
+      picked.plotContent !== null ||
+      picked.knowledgeContent !== null ||
+      picked.agents.length > 0
     );
 
   const submit = async (e: React.FormEvent) => {
@@ -172,17 +164,17 @@ export function MigrateProjectDialog({ open, onOpenChange, onMigrated }: Props) 
       const trimmedPath = path.trim().replace(/\/+$/, "") || "/";
       const body: MigrationBody = { path: trimmedPath };
       if (name.trim()) body.name = name.trim();
-      if (rootPick?.plotContent !== null && rootPick?.plotContent !== undefined) {
-        body.plotContent = rootPick.plotContent;
+      if (picked?.plotContent !== null && picked?.plotContent !== undefined) {
+        body.plotContent = picked.plotContent;
       }
       if (
-        statePick?.knowledgeContent !== null &&
-        statePick?.knowledgeContent !== undefined
+        picked?.knowledgeContent !== null &&
+        picked?.knowledgeContent !== undefined
       ) {
-        body.knowledgeContent = statePick.knowledgeContent;
+        body.knowledgeContent = picked.knowledgeContent;
       }
-      if (statePick && statePick.agents.length > 0) {
-        body.agents = statePick.agents;
+      if (picked && picked.agents.length > 0) {
+        body.agents = picked.agents;
       }
       const r = await postJson<MigrationResult>(
         "/api/orchestrator/projects/migrate",
@@ -211,7 +203,7 @@ export function MigrateProjectDialog({ open, onOpenChange, onMigrated }: Props) 
         <DialogHeader>
           <DialogTitle>Migrate project from folder</DialogTitle>
           <DialogDescription>
-            Upserts PLOT.md, knowledge.md, and agents/*.md from local folders
+            Upserts PLOT.md, knowledge.md, and agents/*.md from a local folder
             into SQLite. Browser reads files; backend writes under the path you
             type. Never deletes.
           </DialogDescription>
@@ -265,71 +257,51 @@ export function MigrateProjectDialog({ open, onOpenChange, onMigrated }: Props) 
                 multiple
                 /* @ts-expect-error non-standard */
                 webkitdirectory=""
-                onChange={(e) => void onRootPick(e)}
+                onChange={(e) => void onPick(e)}
                 disabled={busy}
                 className="block w-full text-xs"
               />
               <p className="text-xs text-muted-foreground">
-                Reads PLOT.md from the folder root.
+                Reads PLOT.md, <code>.orchestrator/knowledge.md</code>, and{" "}
+                <code>.orchestrator/agents/&lt;slug&gt;.md</code> (lowercase
+                slug).
               </p>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                .orchestrator state folder
-              </label>
-              <input
-                type="file"
-                multiple
-                /* @ts-expect-error non-standard */
-                webkitdirectory=""
-                onChange={(e) => void onStatePick(e)}
-                disabled={busy}
-                className="block w-full text-xs"
-              />
-              <p className="text-xs text-muted-foreground">
-                Pick the <code>.orchestrator/</code> directory directly. Reads{" "}
-                <code>knowledge.md</code> and <code>agents/&lt;slug&gt;.md</code>{" "}
-                (lowercase slug).
-              </p>
-            </div>
-
-            {(rootPick || statePick) && (
-              <div className="space-y-2 rounded-md border p-3 text-xs font-mono">
-                {rootPick ? (
-                  <div>
-                    <div>Project root: {rootPick.rootName ?? "(none)"}/</div>
-                    <div className="pl-4">
-                      PLOT.md:{" "}
-                      {rootPick.plotContent !== null
-                        ? `${rootPick.plotContent.length} chars`
-                        : "not found"}
-                    </div>
+            {picked && (
+              <div className="rounded-md border p-3 text-sm space-y-1">
+                <div className="font-medium">
+                  Detected in {picked.rootName ?? "(unknown)"}/:
+                </div>
+                <div>
+                  PLOT.md:{" "}
+                  {picked.plotContent !== null
+                    ? `${picked.plotContent.length} chars`
+                    : "not found"}
+                </div>
+                <div>
+                  .orchestrator/knowledge.md:{" "}
+                  {picked.knowledgeContent !== null
+                    ? `${picked.knowledgeContent.length} chars`
+                    : "not found"}
+                </div>
+                <div>
+                  .orchestrator/agents/: {picked.agents.length} file(s)
+                  {picked.agents.length > 0 &&
+                    ` — ${picked.agents.map((a) => a.slug).join(", ")}`}
+                </div>
+                {picked.rejected.length > 0 && (
+                  <div className="text-amber-600">
+                    Rejected (slug regex / case): {picked.rejected.join(", ")}
                   </div>
-                ) : null}
-                {statePick ? (
-                  <div>
-                    <div>State folder: {statePick.rootName ?? "(none)"}/</div>
-                    <div className="pl-4">
-                      knowledge.md:{" "}
-                      {statePick.knowledgeContent !== null
-                        ? `${statePick.knowledgeContent.length} chars`
-                        : "not found"}
-                    </div>
-                    <div className="pl-4">
-                      agents: {statePick.agents.length} file(s)
-                      {statePick.agents.length > 0
-                        ? ` — ${statePick.agents.map((a) => a.slug).join(", ")}`
-                        : ""}
-                    </div>
-                    {statePick.rejected.length > 0 ? (
-                      <div className="pl-4 text-amber-600">
-                        Rejected (uppercase / bad slug):{" "}
-                        {statePick.rejected.join(", ")}
-                      </div>
-                    ) : null}
+                )}
+                {picked.warnDotfileStrip && (
+                  <div className="text-amber-600 mt-2">
+                    Browser may have stripped <code>.orchestrator/</code>. Try
+                    Firefox, or paste the affected files manually via the MCP{" "}
+                    <code>project_migrate</code> tool.
                   </div>
-                ) : null}
+                )}
               </div>
             )}
 
