@@ -46,6 +46,9 @@ export function mapServiceError(err: unknown): never {
       case 'invalid_name':
         unprocessable('name', 'invalidName');
         break;
+      case 'no_change':
+        unprocessable('project', 'noChange');
+        break;
     }
   }
 

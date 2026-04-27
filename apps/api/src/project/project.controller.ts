@@ -13,7 +13,6 @@ import {
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
-  ApiNoContentResponse,
   ApiOkResponse,
   ApiParam,
   ApiTags,
@@ -24,16 +23,13 @@ import { mapServiceError } from '../common/errors/map-service-error';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { QueryProjectDto } from './dto/query-project.dto';
+import { ProjectDeleteResponseDto } from './dto/project.dto';
 import {
   InfinityPaginationResponse,
   InfinityPaginationResponseDto,
 } from '../utils/dto/infinity-pagination-response.dto';
 import { infinityPagination } from '../utils/infinity-pagination';
-
-const decodePath = (encoded: string): string =>
-  Buffer.from(encoded.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString(
-    'utf8',
-  );
+import { decodePath } from '../utils/path-encoding';
 
 @ApiTags('Projects')
 @Controller('api/orchestrator')
@@ -49,7 +45,7 @@ export class ProjectController {
     const page = query?.page ?? 1;
     const limit = Math.min(query?.limit ?? 10, 50);
     return infinityPagination(
-      this.projects.findManyWithPagination({ page, limit }),
+      this.projects.findManyWithPagination({ ...query, page, limit }),
       { page, limit },
     );
   }
@@ -61,7 +57,7 @@ export class ProjectController {
   getProject(@Param('encodedPath') encodedPath: string): Project {
     try {
       const path = decodePath(encodedPath);
-      const found = this.projects.get(path);
+      const found = this.projects.findOne(path);
       if (!found) {
         throw new NotFoundException({
           status: 404,
@@ -80,7 +76,7 @@ export class ProjectController {
   @ApiCreatedResponse({ type: Project })
   createProject(@Body() body: CreateProjectDto): Project {
     try {
-      return this.projects.create({ path: body.path, name: body.name });
+      return this.projects.create(body);
     } catch (e) {
       mapServiceError(e);
     }
@@ -96,7 +92,7 @@ export class ProjectController {
   ): Project {
     try {
       const path = decodePath(encodedPath);
-      return this.projects.update(path, { name: body.name });
+      return this.projects.update(path, body);
     } catch (e) {
       mapServiceError(e);
     }
@@ -105,11 +101,11 @@ export class ProjectController {
   @Delete('projects/:encodedPath')
   @HttpCode(HttpStatus.OK)
   @ApiParam({ name: 'encodedPath', type: String, required: true })
-  @ApiNoContentResponse()
+  @ApiOkResponse({ type: ProjectDeleteResponseDto })
   deleteProject(@Param('encodedPath') encodedPath: string) {
     try {
       const path = decodePath(encodedPath);
-      return this.projects.delete(path);
+      return this.projects.remove(path);
     } catch (e) {
       mapServiceError(e);
     }

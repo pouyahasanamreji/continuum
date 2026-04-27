@@ -152,7 +152,7 @@ describe('ProjectService.create', () => {
   });
 });
 
-describe('ProjectService.delete', () => {
+describe('ProjectService.remove', () => {
   it('cascades plot/plot_history/knowledge/knowledge_history/agents', () => {
     const { service, db, agents, idOf } = makeService();
     const path = '/Users/foo/proj';
@@ -183,7 +183,7 @@ describe('ProjectService.delete', () => {
 
     expect(agents()).toBe(2);
 
-    const result = service.delete(path);
+    const result = service.remove(path);
     expect(result.deleted).toBe(true);
     expect(result.cascadedAgents).toBe(2);
 
@@ -247,22 +247,15 @@ describe('ProjectService.update', () => {
       ProjectServiceError,
     );
   });
-});
 
-describe('ProjectService.assertExists', () => {
-  it('throws project_not_found when missing', () => {
-    const { service } = makeService();
-    expect(() => service.assertExists('/nope')).toThrow(ProjectServiceError);
-    try {
-      service.assertExists('/nope');
-    } catch (e) {
-      expect((e as ProjectServiceError).reason).toBe('project_not_found');
-    }
-  });
-
-  it('passes when present', () => {
+  it('throws no_change on empty patch (decision 4)', () => {
     const { service } = makeService();
     service.create({ path: '/x/y' });
-    expect(() => service.assertExists('/x/y')).not.toThrow();
+    expect(() => service.update('/x/y', {})).toThrow(ProjectServiceError);
+    try {
+      service.update('/x/y', {});
+    } catch (e) {
+      expect((e as ProjectServiceError).reason).toBe('no_change');
+    }
   });
 });

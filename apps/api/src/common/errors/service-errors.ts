@@ -2,7 +2,8 @@ export type ProjectErrorReason =
   | 'invalid_path'
   | 'invalid_name'
   | 'project_exists'
-  | 'project_not_found';
+  | 'project_not_found'
+  | 'no_change';
 
 export class ProjectServiceError extends Error {
   constructor(

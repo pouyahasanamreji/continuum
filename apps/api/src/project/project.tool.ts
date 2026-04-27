@@ -7,10 +7,8 @@ import { createProjectDto } from './dto/create-project.dto';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import { renameProjectDto } from './dto/update-project.dto';
 import type { RenameProjectInput } from './dto/update-project.dto';
-import { getProjectDto } from './dto/get-project.dto';
-import type { GetProjectDto } from './dto/get-project.dto';
-import { deleteProjectDto } from './dto/delete-project.dto';
-import type { DeleteProjectDto } from './dto/delete-project.dto';
+import { pathOnlyDto } from './dto/project.dto';
+import type { PathOnlyDto } from './dto/project.dto';
 
 function toolError(err: unknown) {
   const msg =
@@ -43,7 +41,7 @@ export class ProjectTool {
   })
   projectList() {
     try {
-      return toolSuccess(this.projects.list());
+      return toolSuccess(this.projects.findAll());
     } catch (e) {
       return toolError(e);
     }
@@ -53,12 +51,11 @@ export class ProjectTool {
     name: 'project_get',
     description:
       'Get a project by canonical absolute path. Use your `pwd` as `path`. Returns null if not found (no error).',
-    parameters: getProjectDto,
+    parameters: pathOnlyDto,
   })
-  projectGet(args: GetProjectDto) {
+  projectGet(args: PathOnlyDto) {
     try {
-      const canonical = this.projects.canonicalize(args.path);
-      const found = this.projects.get(canonical);
+      const found = this.projects.findOne(args.path);
       return toolSuccess(found);
     } catch (e) {
       return toolError(e);
@@ -87,7 +84,7 @@ export class ProjectTool {
   })
   projectRename(args: RenameProjectInput) {
     try {
-      return toolSuccess(this.projects.update(args.path, { name: args.name }));
+      return toolSuccess(this.projects.update(args.path, args));
     } catch (e) {
       return toolError(e);
     }
@@ -97,11 +94,11 @@ export class ProjectTool {
     name: 'project_delete',
     description:
       'Delete a project and CASCADE all of its plot/knowledge/agents. Returns {deleted: true, cascadedAgents: N}.',
-    parameters: deleteProjectDto,
+    parameters: pathOnlyDto,
   })
-  projectDelete(args: DeleteProjectDto) {
+  projectDelete(args: PathOnlyDto) {
     try {
-      return toolSuccess(this.projects.delete(args.path));
+      return toolSuccess(this.projects.remove(args.path));
     } catch (e) {
       return toolError(e);
     }

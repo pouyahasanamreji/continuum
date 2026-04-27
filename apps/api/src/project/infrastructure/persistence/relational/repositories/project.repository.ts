@@ -1,15 +1,28 @@
 import { Injectable } from '@nestjs/common';
 import { OrchestratorDbService } from '../../../../../database/orchestrator-db.service';
 import { Project } from '../../../../domain/project';
-import { DeepPartial } from '../../../../../utils/types/deep-partial.type';
 import { IPaginationOptions } from '../../../../../utils/types/pagination-options';
+import {
+  FilterProjectDto,
+  SortProjectDto,
+} from '../../../../dto/query-project.dto';
 import {
   ProjectCreatePayload,
   ProjectCreateResult,
   ProjectRepository,
+  ProjectUpdatePatch,
 } from '../../project.repository';
 import { ProjectEntity } from '../entities/project.entity';
 import { ProjectMapper } from '../mappers/project.mapper';
+
+const ORDER_COLUMNS = {
+  id: 'id',
+  path: 'path',
+  name: 'name',
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
+  deletedAt: 'deleted_at',
+} as const;
 
 @Injectable()
 export class ProjectRelationalRepository extends ProjectRepository {
@@ -27,13 +40,43 @@ export class ProjectRelationalRepository extends ProjectRepository {
     return rows.map((r) => ProjectMapper.toDomain(r));
   }
 
-  findManyWithPagination(options: IPaginationOptions): Project[] {
+  findManyWithPagination({
+    filterOptions,
+    sortOptions,
+    paginationOptions,
+  }: {
+    filterOptions?: FilterProjectDto | null;
+    sortOptions?: SortProjectDto[] | null;
+    paginationOptions: IPaginationOptions;
+  }): Project[] {
+    const where: string[] = ['deleted_at IS NULL'];
+    const params: (string | number)[] = [];
+    if (filterOptions?.path) {
+      where.push('path = ?');
+      params.push(filterOptions.path);
+    }
+
+    const orderClauses: string[] = [];
+    if (sortOptions?.length) {
+      for (const s of sortOptions) {
+        if (!Object.hasOwn(ORDER_COLUMNS, s.orderBy)) continue;
+        const dir = (s.order ?? '').toUpperCase();
+        if (dir !== 'ASC' && dir !== 'DESC') continue;
+        const col = ORDER_COLUMNS[s.orderBy];
+        orderClauses.push(`${col} ${dir}`);
+      }
+    }
+    const orderBy =
+      orderClauses.length > 0 ? orderClauses.join(', ') : 'created_at DESC';
+
+    const sql = `SELECT * FROM projects WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT ? OFFSET ?`;
     const rows = this.dbs.db
-      .prepare<
-        [number, number],
-        ProjectEntity
-      >('SELECT * FROM projects WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?')
-      .all(options.limit, (options.page - 1) * options.limit);
+      .prepare<(string | number)[], ProjectEntity>(sql)
+      .all(
+        ...params,
+        paginationOptions.limit,
+        (paginationOptions.page - 1) * paginationOptions.limit,
+      );
     return rows.map((r) => ProjectMapper.toDomain(r));
   }
 
@@ -102,19 +145,15 @@ export class ProjectRelationalRepository extends ProjectRepository {
     return { ok: true, project: created };
   }
 
-  update(id: number, payload: DeepPartial<Project>): Project {
+  update(id: number, patch: ProjectUpdatePatch): Project {
     const sets: string[] = [];
     const params: (string | number | null)[] = [];
-    if (payload.name !== undefined) {
+    if (patch.name !== undefined) {
       sets.push('name = ?');
-      params.push(payload.name);
+      params.push(patch.name);
     }
-    const now =
-      payload.updatedAt instanceof Date
-        ? payload.updatedAt.getTime()
-        : Date.now();
     sets.push('updated_at = ?');
-    params.push(now);
+    params.push(patch.updatedAt);
     params.push(id);
     this.dbs.db
       .prepare(
@@ -128,7 +167,7 @@ export class ProjectRelationalRepository extends ProjectRepository {
     return updated;
   }
 
-  hardRemove(id: number): { cascadedAgents: number } {
+  remove(id: number): { cascadedAgents: number } {
     const count = (
       this.dbs.db
         .prepare<
