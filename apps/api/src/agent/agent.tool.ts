@@ -84,8 +84,7 @@ export class AgentTool {
   })
   agentCreate(args: CreateAgentInput) {
     try {
-      const { project, ...rest } = args;
-      const created = this.agents.create(project, rest);
+      const created = this.agents.create(args);
       return {
         content: [
           { type: 'text' as const, text: JSON.stringify(created, null, 2) },
@@ -104,8 +103,7 @@ export class AgentTool {
   })
   agentUpdate(args: UpdateAgentInput) {
     try {
-      const { project, slug, ...patch } = args;
-      const updated = this.agents.update(project, slug, patch);
+      const updated = this.agents.update(args.slug, args);
       return {
         content: [
           { type: 'text' as const, text: JSON.stringify(updated, null, 2) },
