@@ -29,11 +29,7 @@ import {
   InfinityPaginationResponseDto,
 } from '../utils/dto/infinity-pagination-response.dto';
 import { infinityPagination } from '../utils/infinity-pagination';
-
-const decodePath = (encoded: string): string =>
-  Buffer.from(encoded.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString(
-    'utf8',
-  );
+import { decodePath } from '../utils/path-encoding';
 
 @ApiTags('Projects')
 @Controller('api/orchestrator')
