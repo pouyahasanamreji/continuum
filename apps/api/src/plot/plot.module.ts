@@ -16,6 +16,6 @@ const restEnabled = process.env.PANEL_REST_ENABLED === 'true';
   ],
   controllers: restEnabled ? [PlotController] : [],
   providers: [PlotService, PlotTool],
-  exports: [PlotService],
+  exports: [PlotService, RelationalPlotPersistenceModule],
 })
 export class PlotModule {}
