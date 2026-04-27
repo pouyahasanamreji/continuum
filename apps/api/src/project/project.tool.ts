@@ -41,7 +41,7 @@ export class ProjectTool {
   })
   projectList() {
     try {
-      return toolSuccess(this.projects.list());
+      return toolSuccess(this.projects.findAll());
     } catch (e) {
       return toolError(e);
     }
@@ -55,8 +55,7 @@ export class ProjectTool {
   })
   projectGet(args: PathOnlyDto) {
     try {
-      const canonical = this.projects.canonicalize(args.path);
-      const found = this.projects.get(canonical);
+      const found = this.projects.findOne(args.path);
       return toolSuccess(found);
     } catch (e) {
       return toolError(e);
@@ -85,7 +84,7 @@ export class ProjectTool {
   })
   projectRename(args: RenameProjectInput) {
     try {
-      return toolSuccess(this.projects.update(args.path, { name: args.name }));
+      return toolSuccess(this.projects.update(args.path, args));
     } catch (e) {
       return toolError(e);
     }

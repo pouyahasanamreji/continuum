@@ -61,7 +61,7 @@ export class ProjectController {
   getProject(@Param('encodedPath') encodedPath: string): Project {
     try {
       const path = decodePath(encodedPath);
-      const found = this.projects.get(path);
+      const found = this.projects.findOne(path);
       if (!found) {
         throw new NotFoundException({
           status: 404,
@@ -80,7 +80,7 @@ export class ProjectController {
   @ApiCreatedResponse({ type: Project })
   createProject(@Body() body: CreateProjectDto): Project {
     try {
-      return this.projects.create({ path: body.path, name: body.name });
+      return this.projects.create(body);
     } catch (e) {
       mapServiceError(e);
     }
@@ -96,7 +96,7 @@ export class ProjectController {
   ): Project {
     try {
       const path = decodePath(encodedPath);
-      return this.projects.update(path, { name: body.name });
+      return this.projects.update(path, body);
     } catch (e) {
       mapServiceError(e);
     }

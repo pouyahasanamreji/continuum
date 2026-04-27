@@ -7,6 +7,8 @@ import {
   ProjectUpdatePatch,
 } from './infrastructure/persistence/project.repository';
 import { PlotService } from '../plot/plot.service';
+import { CreateProjectDto } from './dto/create-project.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
 import { QueryProjectDto } from './dto/query-project.dto';
 
 @Injectable()
@@ -55,7 +57,7 @@ export class ProjectService {
     return p;
   }
 
-  list(): Project[] {
+  findAll(): Project[] {
     return this.repo.findAll();
   }
 
@@ -73,11 +75,12 @@ export class ProjectService {
     });
   }
 
-  get(path: string): Project | null {
-    return this.repo.findByPath(path);
+  findOne(path: string): Project | null {
+    const canonical = this.canonicalize(path);
+    return this.repo.findByPath(canonical);
   }
 
-  findIdByPathOrThrow(path: string): number {
+  private findIdByPathOrThrow(path: string): number {
     const id = this.repo.findIdByPath(path);
     if (id === null) {
       throw new ProjectServiceError('project_not_found', path);
@@ -85,15 +88,9 @@ export class ProjectService {
     return id;
   }
 
-  assertExists(path: string): void {
-    if (this.repo.findIdByPath(path) === null) {
-      throw new ProjectServiceError('project_not_found', path);
-    }
-  }
-
-  create(input: { path: string; name?: string }): Project {
-    const path = this.canonicalize(input.path);
-    const name = (input.name ?? basename(path)).trim();
+  create(createProjectDto: CreateProjectDto): Project {
+    const path = this.canonicalize(createProjectDto.path);
+    const name = (createProjectDto.name ?? basename(path)).trim();
     if (!name) {
       throw new ProjectServiceError('invalid_name', 'empty after trim');
     }
@@ -113,23 +110,21 @@ export class ProjectService {
     return result.project;
   }
 
-  update(path: string, patch: { name?: string }): Project {
+  update(path: string, updateProjectDto: UpdateProjectDto): Project {
     const canonical = this.canonicalize(path);
     const id = this.findIdByPathOrThrow(canonical);
-    if (patch.name !== undefined) {
-      const trimmed = patch.name.trim();
-      if (!trimmed || /[\r\n]/.test(trimmed)) {
-        throw new ProjectServiceError('invalid_name');
-      }
-      const repoPatch: ProjectUpdatePatch = {
-        name: trimmed,
-        updatedAt: Date.now(),
-      };
-      return this.repo.update(id, repoPatch);
+    if (updateProjectDto.name === undefined) {
+      throw new ProjectServiceError('no_change', canonical);
     }
-    const existing = this.repo.findById(id);
-    if (!existing) throw new ProjectServiceError('project_not_found', path);
-    return existing;
+    const trimmed = updateProjectDto.name.trim();
+    if (!trimmed || /[\r\n]/.test(trimmed)) {
+      throw new ProjectServiceError('invalid_name');
+    }
+    const repoPatch: ProjectUpdatePatch = {
+      name: trimmed,
+      updatedAt: Date.now(),
+    };
+    return this.repo.update(id, repoPatch);
   }
 
   remove(path: string): { deleted: true; cascadedAgents: number } {

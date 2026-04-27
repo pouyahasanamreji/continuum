@@ -247,22 +247,15 @@ describe('ProjectService.update', () => {
       ProjectServiceError,
     );
   });
-});
 
-describe('ProjectService.assertExists', () => {
-  it('throws project_not_found when missing', () => {
-    const { service } = makeService();
-    expect(() => service.assertExists('/nope')).toThrow(ProjectServiceError);
-    try {
-      service.assertExists('/nope');
-    } catch (e) {
-      expect((e as ProjectServiceError).reason).toBe('project_not_found');
-    }
-  });
-
-  it('passes when present', () => {
+  it('throws no_change on empty patch (decision 4)', () => {
     const { service } = makeService();
     service.create({ path: '/x/y' });
-    expect(() => service.assertExists('/x/y')).not.toThrow();
+    expect(() => service.update('/x/y', {})).toThrow(ProjectServiceError);
+    try {
+      service.update('/x/y', {});
+    } catch (e) {
+      expect((e as ProjectServiceError).reason).toBe('no_change');
+    }
   });
 });
