@@ -3,7 +3,7 @@ import { Tool } from '@rekog/mcp-nest';
 import { MigrationService } from './migration.service';
 import { ProjectServiceError } from '../common/errors/service-errors';
 import { migrateProjectDto } from './dto/migrate-project.dto';
-import type { MigrateProjectDto } from './dto/migrate-project.dto';
+import type { MigrateProjectInput } from './dto/migrate-project.dto';
 
 function toolError(err: unknown) {
   const msg =
@@ -34,7 +34,7 @@ export class MigrationTool {
       "Upsert a project's plot/knowledge/agents from raw markdown. Creates project if missing. Never deletes.",
     parameters: migrateProjectDto,
   })
-  projectMigrate(args: MigrateProjectDto) {
+  projectMigrate(args: MigrateProjectInput) {
     try {
       return toolSuccess(this.migration.migrate(args));
     } catch (e) {
