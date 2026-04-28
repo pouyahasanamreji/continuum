@@ -136,6 +136,33 @@ export class AgentService {
       touched = true;
     }
 
+    const wantsArtifactEdit =
+      updateAgentDto.plan !== undefined ||
+      updateAgentDto.implPrompt !== undefined ||
+      updateAgentDto.coordinationBrief !== undefined;
+
+    if (wantsArtifactEdit) {
+      const effectiveStatus = out.status ?? existing.status;
+      if (effectiveStatus !== 'draft' && effectiveStatus !== 'active') {
+        throw new AgentServiceError(
+          'artifacts_frozen',
+          `status=${effectiveStatus}`,
+        );
+      }
+      if (updateAgentDto.plan !== undefined) {
+        out.plan = updateAgentDto.plan;
+        touched = true;
+      }
+      if (updateAgentDto.implPrompt !== undefined) {
+        out.implPrompt = updateAgentDto.implPrompt;
+        touched = true;
+      }
+      if (updateAgentDto.coordinationBrief !== undefined) {
+        out.coordinationBrief = updateAgentDto.coordinationBrief;
+        touched = true;
+      }
+    }
+
     if (!touched) throw new AgentServiceError('no_change', slug);
 
     this.repo.update(existing.id, out);

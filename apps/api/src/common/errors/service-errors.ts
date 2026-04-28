@@ -55,6 +55,7 @@ export class AgentServiceError extends Error {
       | 'missing_merged_commit'
       | 'invalid_merged_commit'
       | 'missing_abandoned_reason'
+      | 'artifacts_frozen'
       | 'no_change'
       | 'project_not_found',
     public readonly detail?: string,

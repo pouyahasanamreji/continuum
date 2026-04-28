@@ -17,6 +17,9 @@ export const updateAgentDto = z.object({
   postMergeNotes: z.string().optional(),
   mergedCommit: z.string().optional(),
   abandonedReason: z.string().optional(),
+  plan: z.string().min(1).optional(),
+  implPrompt: z.string().min(1).optional(),
+  coordinationBrief: z.string().min(1).optional(),
 });
 export type UpdateAgentInput = z.infer<typeof updateAgentDto>;
 
@@ -54,4 +57,22 @@ export class UpdateAgentDto extends PartialType(CreateAgentDto) {
   @IsOptional()
   @IsString()
   abandonedReason?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  plan?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  implPrompt?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  coordinationBrief?: string;
 }

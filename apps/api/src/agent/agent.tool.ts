@@ -98,7 +98,7 @@ export class AgentTool {
   @Tool({
     name: 'agent_update',
     description:
-      'Update an agent in `project`. Allowed transitions: draft→active, active→merged|abandoned. merged requires mergedCommit (len≥7). abandoned requires abandonedReason.',
+      'Update an agent in `project`. Allowed transitions: draft→active, active→merged|abandoned. merged requires mergedCommit (len≥7). abandoned requires abandonedReason. plan/implPrompt/coordinationBrief patchable while status ∈ {draft, active}; frozen on merged/abandoned.',
     parameters: updateAgentDto,
   })
   agentUpdate(args: UpdateAgentInput) {
