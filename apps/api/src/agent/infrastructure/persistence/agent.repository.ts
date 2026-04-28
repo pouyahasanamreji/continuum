@@ -24,6 +24,9 @@ export interface AgentUpdatePatch {
   abandonedReason?: string;
   reservedPaths?: string[];
   postMergeNotes?: string;
+  plan?: string;
+  implPrompt?: string;
+  coordinationBrief?: string;
   updatedAt: number;
 }
 

@@ -118,6 +118,9 @@ export function mapServiceError(err: unknown): never {
       case 'missing_abandoned_reason':
         unprocessable('abandonedReason', 'missingAbandonedReason');
         break;
+      case 'artifacts_frozen':
+        unprocessable('agent', 'artifactsFrozen');
+        break;
       case 'no_change':
         unprocessable('agent', 'noChange');
         break;

@@ -144,6 +144,18 @@ export class AgentRelationalRepository extends AgentRepository {
       sets.push('post_merge_notes = ?');
       params.push(patch.postMergeNotes);
     }
+    if (patch.plan !== undefined) {
+      sets.push('plan = ?');
+      params.push(patch.plan);
+    }
+    if (patch.implPrompt !== undefined) {
+      sets.push('impl_prompt = ?');
+      params.push(patch.implPrompt);
+    }
+    if (patch.coordinationBrief !== undefined) {
+      sets.push('coordination_brief = ?');
+      params.push(patch.coordinationBrief);
+    }
 
     params.push(id);
     this.dbs.db
