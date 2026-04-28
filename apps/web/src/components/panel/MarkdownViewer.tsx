@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { MarkdownBody } from "./MarkdownBody";
+import { TokenCountBadge } from "./TokenCountBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -122,13 +123,16 @@ export function MarkdownViewer({ endpoint, emptyMessage }: Props) {
   }
   return (
     <div className="space-y-4">
-      {state.updatedAt !== undefined ? (
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2">
+        {state.updatedAt !== undefined ? (
           <Badge variant="secondary">
             Last updated {relTime(state.updatedAt)}
           </Badge>
-        </div>
-      ) : null}
+        ) : (
+          <span />
+        )}
+        <TokenCountBadge endpoint={endpoint} project={activeProject} />
+      </div>
       <MarkdownBody text={state.text} />
     </div>
   );

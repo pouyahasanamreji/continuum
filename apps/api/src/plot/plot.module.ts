@@ -5,6 +5,7 @@ import { PlotService } from './plot.service';
 import { PlotTool } from './plot.tool';
 import { PlotController } from './plot.controller';
 import { RelationalPlotPersistenceModule } from './infrastructure/persistence/relational/relational-persistence.module';
+import { TokenizerModule } from '../tokenizer/tokenizer.module';
 
 const restEnabled = process.env.PANEL_REST_ENABLED === 'true';
 
@@ -13,6 +14,7 @@ const restEnabled = process.env.PANEL_REST_ENABLED === 'true';
     RelationalProjectPersistenceModule,
     RelationalPlotPersistenceModule,
     McpModule.forFeature([PlotTool], 'continuum'),
+    TokenizerModule,
   ],
   controllers: restEnabled ? [PlotController] : [],
   providers: [PlotService, PlotTool],

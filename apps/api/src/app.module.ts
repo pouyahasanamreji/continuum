@@ -9,6 +9,7 @@ import { PlotModule } from './plot/plot.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { AgentModule } from './agent/agent.module';
 import { MigrationModule } from './migration/migration.module';
+import { TokenizerModule } from './tokenizer/tokenizer.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { MigrationModule } from './migration/migration.module';
     KnowledgeModule,
     AgentModule,
     MigrationModule,
+    TokenizerModule,
   ],
   controllers: [AppController],
   providers: [AppService],
