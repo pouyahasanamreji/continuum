@@ -151,6 +151,8 @@ pnpm -F @continuum/api check-types  # tsc --noEmit
 | `PANEL_REST_ENABLED` | `false` | Mount REST controllers under `/api/orchestrator` |
 | `NODE_ENV` | _unset_ | Production guards destructive migrations |
 | `ORCHESTRATOR_ALLOW_DESTRUCTIVE_MIGRATE` | _unset_ | Set to `1` to opt in to destructive migrations in production |
+| `ANTHROPIC_API_KEY` | _unset_ | Required for `/api/orchestrator/{plot,knowledge}/token-count`. Server-side only. |
+| `ANTHROPIC_TOKENIZER_MODEL` | `claude-opus-4-7` | Model passed to Anthropic `count_tokens`. |
 
 ## Web — `apps/web` (`@continuum/web`)
 
