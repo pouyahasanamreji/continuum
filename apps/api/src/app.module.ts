@@ -10,6 +10,7 @@ import { KnowledgeModule } from './knowledge/knowledge.module';
 import { AgentModule } from './agent/agent.module';
 import { MigrationModule } from './migration/migration.module';
 import { TokenizerModule } from './tokenizer/tokenizer.module';
+import { AppSettingsModule } from './app-settings/app-settings.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { TokenizerModule } from './tokenizer/tokenizer.module';
     AgentModule,
     MigrationModule,
     TokenizerModule,
+    AppSettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

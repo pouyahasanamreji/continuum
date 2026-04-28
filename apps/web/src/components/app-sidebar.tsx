@@ -18,6 +18,7 @@ import {
   BookOpenIcon,
   UsersIcon,
   FolderKanbanIcon,
+  Settings as SettingsIcon,
 } from "lucide-react"
 
 const data = {
@@ -55,6 +56,12 @@ const data = {
       title: "Agents",
       url: "/agents",
       icon: <UsersIcon />,
+      isActive: false,
+    },
+    {
+      title: "Settings",
+      url: "/settings",
+      icon: <SettingsIcon />,
       isActive: false,
     },
   ],

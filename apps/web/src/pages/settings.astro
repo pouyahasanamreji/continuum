@@ -1,0 +1,7 @@
+---
+import PanelLayout from "@/layouts/PanelLayout.astro";
+import { SettingsPage } from "@/components/panel/SettingsPage";
+---
+<PanelLayout activeRoute="/settings" title="Settings">
+  <SettingsPage client:load />
+</PanelLayout>

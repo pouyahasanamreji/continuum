@@ -21,6 +21,7 @@ describe('migrate idempotency', () => {
       'knowledge',
       'knowledge_history',
       'agents',
+      'app_settings',
     ]) {
       expect(
         (db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get() as { c: number }).c,
@@ -39,8 +40,8 @@ describe('migrate idempotency', () => {
   });
 });
 
-describe('migrate v4 → v5 incremental', () => {
-  it('adds plots.created_at + deleted_at, backfills created_at = updated_at, preserves data', () => {
+describe('migrate v5 → v6 incremental', () => {
+  it('adds app_settings, preserves preexisting rows', () => {
     const db = new Database(':memory:');
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
@@ -57,42 +58,102 @@ describe('migrate v4 → v5 incremental', () => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         project_id INTEGER NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
         content TEXT NOT NULL,
-        updated_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER NULL
+      );
+      CREATE TABLE plot_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        applied_diff TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE knowledge (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER NULL
+      );
+      CREATE TABLE knowledge_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        applied_diff TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE agents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        slug TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('draft','active','merged','abandoned')),
+        branch TEXT NOT NULL,
+        worktree TEXT NOT NULL,
+        reserved_paths_json TEXT NOT NULL DEFAULT '[]',
+        request TEXT NOT NULL DEFAULT '',
+        plan TEXT NOT NULL DEFAULT '',
+        impl_prompt TEXT NOT NULL DEFAULT '',
+        coordination_brief TEXT NOT NULL DEFAULT '',
+        post_merge_notes TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL,
+        dispatched_at INTEGER NULL,
+        updated_at INTEGER NOT NULL,
+        merged_at INTEGER NULL,
+        merged_commit TEXT NULL CHECK (merged_commit IS NULL OR length(merged_commit) >= 7),
+        abandoned_reason TEXT NULL,
+        deleted_at INTEGER NULL,
+        UNIQUE(project_id, slug)
       );
     `);
-    db.pragma('user_version = 4');
+    db.pragma('user_version = 5');
     db.prepare(
       'INSERT INTO projects (path, name, created_at, updated_at) VALUES (?, ?, ?, ?)',
     ).run('/tmp/p', 'p', 1000, 1000);
     db.prepare(
-      'INSERT INTO plots (project_id, content, updated_at) VALUES (?, ?, ?)',
-    ).run(1, 'plot-old', 23456);
+      'INSERT INTO plots (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
+    ).run(1, 'plot-keep', 2000, 2000);
+    db.prepare(
+      'INSERT INTO knowledge (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
+    ).run(1, 'know-keep', 2000, 2000);
 
     migrate(db);
 
-    expect(db.pragma('user_version', { simple: true })).toBe(5);
+    expect(db.pragma('user_version', { simple: true })).toBe(6);
     const cols = db
-      .prepare<unknown[], ColumnInfo>('PRAGMA table_info(plots)')
+      .prepare<unknown[], ColumnInfo>('PRAGMA table_info(app_settings)')
       .all()
       .map((c) => c.name);
-    expect(cols).toEqual(expect.arrayContaining(['created_at', 'deleted_at']));
-    const row = db
-      .prepare<
-        unknown[],
-        {
-          content: string;
-          created_at: number;
-          updated_at: number;
-          deleted_at: number | null;
+    expect(cols).toEqual(
+      expect.arrayContaining(['key', 'value', 'updated_at']),
+    );
+    expect(
+      (
+        db.prepare('SELECT COUNT(*) AS c FROM app_settings').get() as {
+          c: number;
         }
-      >(
-        'SELECT content, created_at, updated_at, deleted_at FROM plots WHERE project_id = 1',
-      )
-      .get();
-    expect(row).toBeDefined();
-    expect(row!.content).toBe('plot-old');
-    expect(row!.created_at).toBe(23456);
-    expect(row!.updated_at).toBe(23456);
-    expect(row!.deleted_at).toBeNull();
+      ).c,
+    ).toBe(0);
+    expect(
+      (
+        db
+          .prepare<
+            [number],
+            { content: string }
+          >('SELECT content FROM plots WHERE project_id = ?')
+          .get(1) as { content: string }
+      ).content,
+    ).toBe('plot-keep');
+    expect(
+      (
+        db
+          .prepare<
+            [number],
+            { content: string }
+          >('SELECT content FROM knowledge WHERE project_id = ?')
+          .get(1) as { content: string }
+      ).content,
+    ).toBe('know-keep');
   });
 });

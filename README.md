@@ -118,7 +118,7 @@ Each domain module exposes a `@Controller('api/orchestrator')` only when `PANEL_
 - `foreign_keys = ON`
 - `busy_timeout = 5000`
 
-Schema is migrated forward on boot (current version 5). Tables include `projects`, `plots` + `plot_history`, `knowledge` + `knowledge_history`, `agents`. Soft-delete columns (`deleted_at`) are tracked where applicable. Destructive migrations are blocked unless `NODE_ENV !== 'production'` or `ORCHESTRATOR_ALLOW_DESTRUCTIVE_MIGRATE=1`.
+Schema is migrated forward on boot (current version 6). Tables include `projects`, `plots` + `plot_history`, `knowledge` + `knowledge_history`, `agents`, `app_settings`. Soft-delete columns (`deleted_at`) are tracked where applicable. Destructive migrations are blocked unless `NODE_ENV !== 'production'` or `ORCHESTRATOR_ALLOW_DESTRUCTIVE_MIGRATE=1`.
 
 ### Agent state machine
 
@@ -142,6 +142,8 @@ pnpm -F @continuum/api check-types  # tsc --noEmit
 ```
 
 ### Environment variables
+
+> Settings can also be configured via the panel at `/settings`. Panel values stored in `app_settings` (SQLite, **plaintext**) take precedence over env vars. Env remains supported for headless deploys.
 
 | Var | Default | Purpose |
 | --- | --- | --- |

@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION: number = 5;
+export const SCHEMA_VERSION: number = 6;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -71,6 +71,12 @@ CREATE TABLE IF NOT EXISTS agents (
   UNIQUE(project_id, slug)
 );
 CREATE INDEX IF NOT EXISTS idx_agents_project_status ON agents(project_id, status);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `;
 
 const DROP_LEGACY_SQL = `
@@ -80,6 +86,7 @@ DROP TABLE IF EXISTS knowledge;
 DROP TABLE IF EXISTS plot_history;
 DROP TABLE IF EXISTS plots;
 DROP TABLE IF EXISTS projects;
+DROP TABLE IF EXISTS app_settings;
 `;
 
 export function migrate(db: Database.Database): void {
@@ -119,6 +126,26 @@ export function migrate(db: Database.Database): void {
           ALTER TABLE plots ADD COLUMN deleted_at INTEGER NULL;
         `);
         db.exec(SCHEMA_SQL);
+        db.pragma(`user_version = ${SCHEMA_VERSION}`);
+      });
+      tx.immediate();
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+    return;
+  }
+
+  if (current === 5 && SCHEMA_VERSION === 6) {
+    db.pragma('foreign_keys = OFF');
+    try {
+      const tx = db.transaction(() => {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+        `);
         db.pragma(`user_version = ${SCHEMA_VERSION}`);
       });
       tx.immediate();
