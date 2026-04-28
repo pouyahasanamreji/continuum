@@ -23,9 +23,7 @@ export class AgentRelationalRepository extends AgentRepository {
       .prepare<
         [number],
         AgentEntity
-      >(
-        'SELECT * FROM agents WHERE project_id = ? AND deleted_at IS NULL ORDER BY created_at DESC',
-      )
+      >('SELECT * FROM agents WHERE project_id = ? AND deleted_at IS NULL ORDER BY created_at DESC')
       .all(projectId);
     return rows.map((r) => AgentMapper.toDomain(r));
   }
@@ -38,14 +36,8 @@ export class AgentRelationalRepository extends AgentRepository {
       .prepare<
         [number, number, number],
         AgentEntity
-      >(
-        'SELECT * FROM agents WHERE project_id = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?',
-      )
-      .all(
-        projectId,
-        options.limit,
-        (options.page - 1) * options.limit,
-      );
+      >('SELECT * FROM agents WHERE project_id = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?')
+      .all(projectId, options.limit, (options.page - 1) * options.limit);
     return rows.map((r) => AgentMapper.toDomain(r));
   }
 
@@ -64,9 +56,7 @@ export class AgentRelationalRepository extends AgentRepository {
       .prepare<
         [number, string],
         AgentEntity
-      >(
-        'SELECT * FROM agents WHERE project_id = ? AND slug = ? AND deleted_at IS NULL',
-      )
+      >('SELECT * FROM agents WHERE project_id = ? AND slug = ? AND deleted_at IS NULL')
       .get(projectId, slug);
     return row ? AgentMapper.toDomain(row) : null;
   }

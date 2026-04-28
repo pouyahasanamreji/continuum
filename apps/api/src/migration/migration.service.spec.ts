@@ -46,9 +46,9 @@ function makeService(): {
     db,
     idOf: (path: string) =>
       (
-        db
-          .prepare('SELECT id FROM projects WHERE path = ?')
-          .get(path) as { id: number }
+        db.prepare('SELECT id FROM projects WHERE path = ?').get(path) as {
+          id: number;
+        }
       ).id,
   };
 }
