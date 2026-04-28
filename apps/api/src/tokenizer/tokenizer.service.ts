@@ -1,5 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { TokenizerError } from './tokenizer.error';
+import { AppSettingsService } from '../app-settings/app-settings.service';
+import {
+  SETTING_ANTHROPIC_API_KEY,
+  SETTING_ANTHROPIC_TOKENIZER_MODEL,
+} from '../app-settings/app-settings.keys';
 
 const ENDPOINT = 'https://api.anthropic.com/v1/messages/count_tokens';
 const DEFAULT_MODEL = 'claude-opus-4-7';
@@ -9,14 +14,17 @@ const TIMEOUT_MS = 10_000;
 export class TokenizerService {
   private readonly logger = new Logger(TokenizerService.name);
 
+  constructor(private readonly settings: AppSettingsService) {}
+
   async countTokens(
     text: string,
   ): Promise<{ inputTokens: number; model: string }> {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = this.settings.resolve(SETTING_ANTHROPIC_API_KEY);
     if (!apiKey) {
       throw new TokenizerError('api_key_missing');
     }
-    const model = process.env.ANTHROPIC_TOKENIZER_MODEL ?? DEFAULT_MODEL;
+    const model =
+      this.settings.resolve(SETTING_ANTHROPIC_TOKENIZER_MODEL) ?? DEFAULT_MODEL;
 
     if (text.trim() === '') {
       return { inputTokens: 0, model };
