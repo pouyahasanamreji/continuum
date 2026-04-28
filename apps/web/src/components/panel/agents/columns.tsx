@@ -9,6 +9,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { AgentFull, AgentStatus } from "@/types/agent";
+import { CopyPromptButton } from "./CopyPromptButton";
 
 const dateFmt = new Intl.DateTimeFormat(undefined, {
   dateStyle: "short",
@@ -119,5 +120,15 @@ export const columns: ColumnDef<AgentFull>[] = [
     sortingFn: (a, b) =>
       new Date(a.original.updatedAt).getTime() -
       new Date(b.original.updatedAt).getTime(),
+  },
+  {
+    id: "actions",
+    header: () => null,
+    enableSorting: false,
+    enableHiding: false,
+    cell: ({ row }) =>
+      row.original.status === "draft" ? (
+        <CopyPromptButton implPrompt={row.original.implPrompt} />
+      ) : null,
   },
 ];
