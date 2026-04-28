@@ -12,7 +12,9 @@ function jsonResponse(status: number, body: unknown): Response {
 class StubAppSettings {
   constructor(private store: Map<string, string | null> = new Map()) {}
   resolve(key: string): string | null {
-    const fromStore = this.store.has(key) ? (this.store.get(key) ?? null) : null;
+    const fromStore = this.store.has(key)
+      ? (this.store.get(key) ?? null)
+      : null;
     if (fromStore !== null && fromStore !== '') return fromStore;
     return process.env[key] ?? null;
   }

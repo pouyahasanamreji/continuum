@@ -36,9 +36,9 @@ function makeService(): {
       (db.prepare('SELECT COUNT(*) AS c FROM agents').get() as { c: number }).c,
     idOf: (path: string) =>
       (
-        db
-          .prepare('SELECT id FROM projects WHERE path = ?')
-          .get(path) as { id: number }
+        db.prepare('SELECT id FROM projects WHERE path = ?').get(path) as {
+          id: number;
+        }
       ).id,
   };
 }
