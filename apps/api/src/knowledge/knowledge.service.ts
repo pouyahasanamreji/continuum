@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Knowledge } from './domain/knowledge';
 import { KnowledgeServiceError } from '../common/errors/service-errors';
 import { SLUG_RE } from '../common/slug';
@@ -7,21 +7,28 @@ import {
   KnowledgeRepository,
   KnowledgeUpdatePatch,
 } from './infrastructure/persistence/knowledge.repository';
+import { KnowledgeVectorRepository } from './infrastructure/persistence/knowledge-vector.repository';
 import { ProjectRepository } from '../project/infrastructure/persistence/project.repository';
 import { AgentRepository } from '../agent/infrastructure/persistence/agent.repository';
 import { CreateKnowledgeDto } from './dto/create-knowledge.dto';
 import { UpdateKnowledgeDto } from './dto/update-knowledge.dto';
 import { QueryKnowledgeDto } from './dto/query-knowledge.dto';
+import { EmbedderService } from '../embedder/embedder.service';
+import { EmbedderError } from '../embedder/embedder.error';
 
 const SEARCH_DEFAULT_LIMIT = 10;
 const SEARCH_MAX_LIMIT = 50;
 
 @Injectable()
 export class KnowledgeService {
+  private readonly logger = new Logger(KnowledgeService.name);
+
   constructor(
     private readonly repo: KnowledgeRepository,
     private readonly projectRepo: ProjectRepository,
     private readonly agentRepo: AgentRepository,
+    private readonly embedder: EmbedderService,
+    private readonly vecRepo: KnowledgeVectorRepository,
   ) {}
 
   private resolveProjectIdOrThrow(projectPath: string): number {
@@ -73,7 +80,7 @@ export class KnowledgeService {
     return this.repo.findByProjectIdAndSlug(projectId, slug);
   }
 
-  create(dto: CreateKnowledgeDto): Knowledge {
+  async create(dto: CreateKnowledgeDto): Promise<Knowledge> {
     const projectId = this.resolveProjectIdOrThrow(dto.project);
     if (!SLUG_RE.test(dto.slug)) {
       throw new KnowledgeServiceError('invalid_slug', dto.slug);
@@ -92,10 +99,11 @@ export class KnowledgeService {
     if (!result.ok) {
       throw new KnowledgeServiceError('slug_conflict', dto.slug);
     }
+    await this.vectorize(result.knowledge.id, dto.content);
     return result.knowledge;
   }
 
-  update(slug: string, dto: UpdateKnowledgeDto): Knowledge {
+  async update(slug: string, dto: UpdateKnowledgeDto): Promise<Knowledge> {
     const projectId = this.resolveProjectIdOrThrow(dto.project);
     const existing = this.repo.findByProjectIdAndSlug(projectId, slug);
     if (!existing) throw new KnowledgeServiceError('not_found', slug);
@@ -126,6 +134,9 @@ export class KnowledgeService {
     this.repo.update(existing.id, patch);
     const updated = this.repo.findById(existing.id);
     if (!updated) throw new KnowledgeServiceError('not_found', slug);
+    if (dto.content !== undefined) {
+      await this.vectorize(updated.id, dto.content);
+    }
     return updated;
   }
 
@@ -134,6 +145,19 @@ export class KnowledgeService {
     const existing = this.repo.findByProjectIdAndSlug(projectId, slug);
     if (!existing) throw new KnowledgeServiceError('not_found', slug);
     this.repo.remove(existing.id);
+  }
+
+  private async vectorize(knowledgeId: number, content: string): Promise<void> {
+    try {
+      const vec = await this.embedder.embed(content);
+      this.vecRepo.upsert(knowledgeId, vec);
+    } catch (err) {
+      const reason = err instanceof EmbedderError ? err.reason : 'unknown';
+      this.logger.warn(
+        `knowledge ${knowledgeId} vectorization skipped: ${reason}` +
+          (err instanceof Error ? ` (${err.message})` : ''),
+      );
+    }
   }
 
   search(

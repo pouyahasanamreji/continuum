@@ -130,9 +130,9 @@ export class KnowledgeController {
   @Post('knowledge')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreatedResponse({ type: Knowledge })
-  createKnowledge(@Body() body: CreateKnowledgeDto): Knowledge {
+  async createKnowledge(@Body() body: CreateKnowledgeDto): Promise<Knowledge> {
     try {
-      return this.knowledge.create(body);
+      return await this.knowledge.create(body);
     } catch (e) {
       mapServiceError(e);
     }
@@ -142,13 +142,13 @@ export class KnowledgeController {
   @HttpCode(HttpStatus.OK)
   @ApiParam({ name: 'slug', type: String, required: true })
   @ApiOkResponse({ type: Knowledge })
-  updateKnowledge(
+  async updateKnowledge(
     @Param('slug') slug: string,
     @Body() body: UpdateKnowledgeDto,
-  ): Knowledge {
+  ): Promise<Knowledge> {
     if (!body.project) missingProject();
     try {
-      return this.knowledge.update(slug, body);
+      return await this.knowledge.update(slug, body);
     } catch (e) {
       mapServiceError(e);
     }

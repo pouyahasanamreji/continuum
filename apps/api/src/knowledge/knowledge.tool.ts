@@ -93,9 +93,9 @@ export class KnowledgeTool {
       'Create a new knowledge lesson under `project` attributed to `agentSlug`. `slug` matches /^[a-z][a-z0-9-]*$/ and is unique within the project. `content` is the full lesson body (markdown OK). Use this tool when recording a reusable lesson at post-merge file-back. Optional `kind` is `"fundamental"` (binding rule applied to every dispatch) or `"situational"` (context-specific). Defaults to `"situational"`.',
     parameters: createKnowledgeDto,
   })
-  knowledgeCreate(args: CreateKnowledgeInput) {
+  async knowledgeCreate(args: CreateKnowledgeInput) {
     try {
-      return toolSuccess(this.knowledge.create(args));
+      return toolSuccess(await this.knowledge.create(args));
     } catch (e) {
       return toolError(e);
     }
@@ -107,9 +107,9 @@ export class KnowledgeTool {
       'Whole-content replace of a knowledge lesson by `project` + `slug`. Pass new `content` (full body) and/or new `agentSlug`. Slug rename is not supported — delete+create instead. Empty patch throws `no_change`. Optional `kind` patches the lesson kind ("fundamental" or "situational").',
     parameters: updateKnowledgeDto,
   })
-  knowledgeUpdate(args: UpdateKnowledgeInput) {
+  async knowledgeUpdate(args: UpdateKnowledgeInput) {
     try {
-      return toolSuccess(this.knowledge.update(args.slug, args));
+      return toolSuccess(await this.knowledge.update(args.slug, args));
     } catch (e) {
       return toolError(e);
     }
