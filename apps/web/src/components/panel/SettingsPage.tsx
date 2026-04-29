@@ -16,13 +16,19 @@ import { getJson, patchJson } from "@/lib/api";
 interface AppSettingsResponse {
   anthropicApiKey: string | null;
   anthropicTokenizerModel: string | null;
+  embedderUrl: string | null;
   effective: {
     anthropicApiKey: "db" | "env" | "unset";
     anthropicTokenizerModel: "db" | "env" | "default";
+    embedderUrl: "db" | "env" | "unset";
   };
 }
 
-type FormShape = { anthropicApiKey: string; anthropicTokenizerModel: string };
+type FormShape = {
+  anthropicApiKey: string;
+  anthropicTokenizerModel: string;
+  embedderUrl: string;
+};
 type Effective = AppSettingsResponse["effective"];
 
 type State =
@@ -43,6 +49,7 @@ function toForm(r: AppSettingsResponse): FormShape {
   return {
     anthropicApiKey: r.anthropicApiKey ?? "",
     anthropicTokenizerModel: r.anthropicTokenizerModel ?? "",
+    embedderUrl: r.embedderUrl ?? "",
   };
 }
 
@@ -112,7 +119,8 @@ export function SettingsPage() {
   const { form, baseline, effective, saving, savedAt } = state;
   const dirty =
     form.anthropicApiKey !== baseline.anthropicApiKey ||
-    form.anthropicTokenizerModel !== baseline.anthropicTokenizerModel;
+    form.anthropicTokenizerModel !== baseline.anthropicTokenizerModel ||
+    form.embedderUrl !== baseline.embedderUrl;
   const showSavedBadge =
     savedAt !== null && Date.now() - savedAt < 3000 && savedTick >= 0;
 
@@ -131,6 +139,8 @@ export function SettingsPage() {
       body.anthropicApiKey = form.anthropicApiKey;
     if (form.anthropicTokenizerModel !== baseline.anthropicTokenizerModel)
       body.anthropicTokenizerModel = form.anthropicTokenizerModel;
+    if (form.embedderUrl !== baseline.embedderUrl)
+      body.embedderUrl = form.embedderUrl;
     try {
       const r = await patchJson<AppSettingsResponse>(ENDPOINT, body);
       const newForm = toForm(r);
@@ -151,7 +161,7 @@ export function SettingsPage() {
   };
 
   return (
-    <form onSubmit={onSubmit}>
+    <form onSubmit={onSubmit} className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle>Anthropic API</CardTitle>
@@ -211,6 +221,39 @@ export function SettingsPage() {
                   Defaults to <code>claude-opus-4-7</code>.
                 </p>
               )}
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Embedder</CardTitle>
+          <CardDescription>
+            Used to vectorize knowledge content on create and update. Point
+            this at an OpenAI-compatible embeddings endpoint (e.g. local
+            Ollama serving <code>embeddinggemma</code>).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium" htmlFor="embedder-url">
+              Embedder URL
+            </label>
+            <Input
+              id="embedder-url"
+              value={form.embedderUrl}
+              onChange={(e) => setForm({ embedderUrl: e.target.value })}
+              placeholder="http://localhost:11434/api/embed"
+            />
+            {effective.embedderUrl === "env" && form.embedderUrl === "" && (
+              <p className="text-xs text-muted-foreground">
+                Currently provided by environment variable.
+              </p>
+            )}
+            {effective.embedderUrl === "unset" && form.embedderUrl === "" && (
+              <p className="text-xs text-muted-foreground">
+                Knowledge will be saved without embeddings.
+              </p>
+            )}
           </div>
         </CardContent>
         <CardFooter className="flex items-center gap-2">
