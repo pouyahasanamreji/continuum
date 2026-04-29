@@ -222,4 +222,39 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
       .all(...params);
     return rows.map((r) => KnowledgeMapper.toDomain(r));
   }
+
+  // vec0 default distance metric is L2; embeddinggemma vectors are L2-normalized
+  // so L2 ranking is cosine-equivalent. Distance is internal — caller gets Knowledge[].
+  searchByVector(
+    projectId: number,
+    queryEmbedding: number[],
+    kind: KnowledgeKindEnum | undefined,
+    limit: number,
+  ): Knowledge[] {
+    // Overfetch from vec0 because top-K runs BEFORE the post-JOIN project/kind filter.
+    const K_VEC = Math.min(200, Math.max(50, limit * 5 + 20));
+    const buf = Buffer.from(new Float32Array(queryEmbedding).buffer);
+    const where: string[] = [
+      'kv.embedding MATCH ?',
+      'kv.k = ?',
+      'k.project_id = ?',
+      'k.deleted_at IS NULL',
+    ];
+    const params: (Buffer | number | string)[] = [buf, K_VEC, projectId];
+    if (kind !== undefined) {
+      where.push('k.kind = ?');
+      params.push(kind);
+    }
+    const sql =
+      `SELECT k.* FROM knowledge_vec kv ` +
+      `JOIN knowledge k ON k.id = kv.knowledge_id ` +
+      `WHERE ${where.join(' AND ')} ` +
+      `ORDER BY kv.distance ` +
+      `LIMIT ?`;
+    params.push(limit);
+    const rows = this.dbs.db
+      .prepare<(Buffer | number | string)[], KnowledgeEntity>(sql)
+      .all(...params);
+    return rows.map((r) => KnowledgeMapper.toDomain(r));
+  }
 }

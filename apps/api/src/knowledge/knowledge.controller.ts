@@ -76,12 +76,12 @@ export class KnowledgeController {
   @ApiQuery({ name: 'kind', enum: KnowledgeKindEnum, required: false })
   @ApiQuery({ name: 'limit', type: Number, required: false })
   @ApiOkResponse({ type: Knowledge, isArray: true })
-  searchKnowledge(
+  async searchKnowledge(
     @Query('project') project?: string,
     @Query('q') q?: string,
     @Query('kind') kind?: string,
     @Query('limit') limit?: string,
-  ): Knowledge[] {
+  ): Promise<Knowledge[]> {
     if (!project) missingProject();
     if (!q && !kind) {
       throw new UnprocessableEntityException({
@@ -101,7 +101,7 @@ export class KnowledgeController {
     }
     const parsed = limit !== undefined ? Number(limit) : undefined;
     try {
-      return this.knowledge.search(project, q, kind, parsed);
+      return await this.knowledge.search(project, q, kind, parsed);
     } catch (e) {
       mapServiceError(e);
     }

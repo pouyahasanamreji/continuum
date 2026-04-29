@@ -430,7 +430,7 @@ describe('KnowledgeService.remove', () => {
 
 describe('KnowledgeService.search', () => {
   it('returns empty for no matches', async () => {
-    const { service, seedAgent } = makeHarness();
+    const { service, seedAgent, embedder } = makeHarness();
     seedAgent('alpha');
     await service.create({
       project: PROJECT_PATH,
@@ -438,11 +438,12 @@ describe('KnowledgeService.search', () => {
       slug: 'one',
       content: 'unique-body',
     });
-    expect(service.search(PROJECT_PATH, 'absent', undefined)).toEqual([]);
+    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    expect(await service.search(PROJECT_PATH, 'absent', undefined)).toEqual([]);
   });
 
   it('matches by content substring', async () => {
-    const { service, seedAgent } = makeHarness();
+    const { service, seedAgent, embedder } = makeHarness();
     seedAgent('alpha');
     await service.create({
       project: PROJECT_PATH,
@@ -456,13 +457,14 @@ describe('KnowledgeService.search', () => {
       slug: 'two',
       content: 'unrelated',
     });
-    const found = service.search(PROJECT_PATH, 'cascade', undefined);
+    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    const found = await service.search(PROJECT_PATH, 'cascade', undefined);
     expect(found.length).toBe(1);
     expect(found[0].slug).toBe('one');
   });
 
   it('matches by slug substring', async () => {
-    const { service, seedAgent } = makeHarness();
+    const { service, seedAgent, embedder } = makeHarness();
     seedAgent('alpha');
     await service.create({
       project: PROJECT_PATH,
@@ -470,12 +472,13 @@ describe('KnowledgeService.search', () => {
       slug: 'cascade-rule',
       content: 'body',
     });
-    const found = service.search(PROJECT_PATH, 'cascade', undefined);
+    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    const found = await service.search(PROJECT_PATH, 'cascade', undefined);
     expect(found.length).toBe(1);
   });
 
   it('respects limit', async () => {
-    const { service, seedAgent } = makeHarness();
+    const { service, seedAgent, embedder } = makeHarness();
     seedAgent('alpha');
     for (let i = 0; i < 5; i++) {
       await service.create({
@@ -485,12 +488,13 @@ describe('KnowledgeService.search', () => {
         content: `match-${i}`,
       });
     }
-    const found = service.search(PROJECT_PATH, 'match', undefined, 2);
+    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    const found = await service.search(PROJECT_PATH, 'match', undefined, 2);
     expect(found.length).toBe(2);
   });
 
   it('clamps limit to max 50', async () => {
-    const { service, seedAgent } = makeHarness();
+    const { service, seedAgent, embedder } = makeHarness();
     seedAgent('alpha');
     await service.create({
       project: PROJECT_PATH,
@@ -498,19 +502,148 @@ describe('KnowledgeService.search', () => {
       slug: 'one',
       content: 'match',
     });
-    expect(service.search(PROJECT_PATH, 'match', undefined, 9999).length).toBe(
-      1,
-    );
+    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    expect(
+      (await service.search(PROJECT_PATH, 'match', undefined, 9999)).length,
+    ).toBe(1);
   });
 
-  it('throws project_not_found for unknown project', () => {
+  it('throws project_not_found for unknown project', async () => {
     const { service } = makeHarness();
     try {
-      service.search('/missing', 'x', undefined);
+      await service.search('/missing', 'x', undefined);
       fail('expected throw');
     } catch (e) {
       expect((e as KnowledgeServiceError).reason).toBe('project_not_found');
     }
+  });
+});
+
+describe('KnowledgeService.search vector path', () => {
+  it('q + embedder OK + vec rows populated → calls searchByVector, never searchByContent', async () => {
+    const { service, seedAgent, embedder, knowledgeRepo } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'one',
+      content: 'body',
+    });
+    const vecSpy = jest.spyOn(knowledgeRepo, 'searchByVector');
+    const likeSpy = jest.spyOn(knowledgeRepo, 'searchByContent');
+    embedder.embed.mockClear();
+    embedder.embed.mockResolvedValueOnce(new Array(768).fill(0.1));
+    const found = await service.search(PROJECT_PATH, 'anything', undefined);
+    expect(embedder.embed).toHaveBeenCalledTimes(1);
+    expect(vecSpy).toHaveBeenCalledTimes(1);
+    expect(likeSpy).not.toHaveBeenCalled();
+    expect(found.length).toBe(1);
+  });
+
+  it('q + EmbedderError(url_missing) → falls back to searchByContent + warns', async () => {
+    const { service, seedAgent, embedder, knowledgeRepo } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'one',
+      content: 'cascade body',
+    });
+    const vecSpy = jest.spyOn(knowledgeRepo, 'searchByVector');
+    const likeSpy = jest.spyOn(knowledgeRepo, 'searchByContent');
+    const warnSpy = jest
+      .spyOn(
+        (service as unknown as { logger: { warn: jest.Mock } }).logger,
+        'warn',
+      )
+      .mockImplementation(() => undefined);
+    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    const found = await service.search(PROJECT_PATH, 'cascade', undefined);
+    expect(vecSpy).not.toHaveBeenCalled();
+    expect(likeSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('url_missing'),
+    );
+    expect(found.length).toBe(1);
+  });
+
+  it('q + EmbedderError(upstream_failed) → falls back to searchByContent', async () => {
+    const { service, seedAgent, embedder, knowledgeRepo } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'one',
+      content: 'cascade body',
+    });
+    const vecSpy = jest.spyOn(knowledgeRepo, 'searchByVector');
+    const likeSpy = jest.spyOn(knowledgeRepo, 'searchByContent');
+    jest
+      .spyOn(
+        (service as unknown as { logger: { warn: jest.Mock } }).logger,
+        'warn',
+      )
+      .mockImplementation(() => undefined);
+    embedder.embed.mockRejectedValueOnce(
+      new EmbedderError('upstream_failed', 'boom'),
+    );
+    const found = await service.search(PROJECT_PATH, 'cascade', undefined);
+    expect(vecSpy).not.toHaveBeenCalled();
+    expect(likeSpy).toHaveBeenCalledTimes(1);
+    expect(found.length).toBe(1);
+  });
+
+  it('q + embedder OK + searchByVector throws → falls back + warns', async () => {
+    const { service, seedAgent, embedder, knowledgeRepo } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'one',
+      content: 'cascade body',
+    });
+    const vecSpy = jest
+      .spyOn(knowledgeRepo, 'searchByVector')
+      .mockImplementation(() => {
+        throw new Error('vec0 boom');
+      });
+    const likeSpy = jest.spyOn(knowledgeRepo, 'searchByContent');
+    const warnSpy = jest
+      .spyOn(
+        (service as unknown as { logger: { warn: jest.Mock } }).logger,
+        'warn',
+      )
+      .mockImplementation(() => undefined);
+    embedder.embed.mockResolvedValueOnce(new Array(768).fill(0.1));
+    const found = await service.search(PROJECT_PATH, 'cascade', undefined);
+    expect(vecSpy).toHaveBeenCalledTimes(1);
+    expect(likeSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('vec0 boom'));
+    expect(found.length).toBe(1);
+  });
+
+  it('kind only (no q) → embedder NOT called; searchByContent called with query=undefined', async () => {
+    const { service, seedAgent, embedder, knowledgeRepo } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'one',
+      content: 'x',
+      kind: 'fundamental',
+    });
+    embedder.embed.mockClear();
+    const vecSpy = jest.spyOn(knowledgeRepo, 'searchByVector');
+    const likeSpy = jest.spyOn(knowledgeRepo, 'searchByContent');
+    await service.search(PROJECT_PATH, undefined, 'fundamental');
+    expect(embedder.embed).not.toHaveBeenCalled();
+    expect(vecSpy).not.toHaveBeenCalled();
+    expect(likeSpy).toHaveBeenCalledWith(
+      expect.any(Number),
+      undefined,
+      'fundamental',
+      expect.any(Number),
+    );
   });
 });
 
@@ -595,13 +728,13 @@ describe('KnowledgeService kind field', () => {
       slug: 'b',
       content: 'b',
     });
-    const found = service.search(PROJECT_PATH, undefined, 'fundamental');
+    const found = await service.search(PROJECT_PATH, undefined, 'fundamental');
     expect(found.length).toBe(1);
     expect(found[0].slug).toBe('a');
   });
 
   it('search with q AND kind AND-combines', async () => {
-    const { service, seedAgent } = makeHarness();
+    const { service, seedAgent, embedder } = makeHarness();
     seedAgent('alpha');
     await service.create({
       project: PROJECT_PATH,
@@ -623,15 +756,16 @@ describe('KnowledgeService kind field', () => {
       content: 'unrelated',
       kind: 'fundamental',
     });
-    const found = service.search(PROJECT_PATH, 'cascade', 'fundamental');
+    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    const found = await service.search(PROJECT_PATH, 'cascade', 'fundamental');
     expect(found.length).toBe(1);
     expect(found[0].slug).toBe('a');
   });
 
-  it('search with neither q nor kind throws invalid_query', () => {
+  it('search with neither q nor kind throws invalid_query', async () => {
     const { service } = makeHarness();
     try {
-      service.search(PROJECT_PATH, undefined, undefined);
+      await service.search(PROJECT_PATH, undefined, undefined);
       fail('expected throw');
     } catch (e) {
       expect((e as KnowledgeServiceError).reason).toBe('invalid_query');

@@ -212,12 +212,12 @@ export class KnowledgeService {
     return { totalKnowledge, totalVectors, missing, stale, currentDim };
   }
 
-  search(
+  async search(
     projectPath: string,
     query: string | undefined,
     kind: KnowledgeKindEnum | undefined,
     limit?: number,
-  ): Knowledge[] {
+  ): Promise<Knowledge[]> {
     if (query === undefined && kind === undefined) {
       throw new KnowledgeServiceError('invalid_query', 'q or kind required');
     }
@@ -226,6 +226,38 @@ export class KnowledgeService {
       limit ?? SEARCH_DEFAULT_LIMIT,
       SEARCH_MAX_LIMIT,
     );
+    if (query === undefined) {
+      return this.repo.searchByContent(
+        projectId,
+        undefined,
+        kind,
+        effectiveLimit,
+      );
+    }
+    let queryVec: number[] | null = null;
+    try {
+      queryVec = await this.embedder.embed(query);
+    } catch (err) {
+      const reason = err instanceof EmbedderError ? err.reason : 'unknown';
+      this.logger.warn(
+        `knowledge_search vector skipped, falling back to LIKE: ${reason}`,
+      );
+    }
+    if (queryVec !== null) {
+      try {
+        return this.repo.searchByVector(
+          projectId,
+          queryVec,
+          kind,
+          effectiveLimit,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `knowledge_search vector query failed, falling back to LIKE: ` +
+            (err instanceof Error ? err.message : String(err)),
+        );
+      }
+    }
     return this.repo.searchByContent(projectId, query, kind, effectiveLimit);
   }
 }
