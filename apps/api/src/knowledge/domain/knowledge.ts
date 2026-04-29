@@ -7,6 +7,12 @@ export class Knowledge {
   @ApiProperty({ type: Number, example: 1 })
   projectId!: number;
 
+  @ApiProperty({ type: Number, example: 1 })
+  agentId!: number;
+
+  @ApiProperty({ type: String, example: 'lesson-on-cascades' })
+  slug!: string;
+
   @ApiProperty({ type: String })
   content!: string;
 

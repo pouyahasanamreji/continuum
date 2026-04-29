@@ -37,7 +37,6 @@ function makeHarness(): Harness {
     path: PROJECT_PATH,
     name: 'proj',
     plotContent: '',
-    knowledgeContent: '',
     now: Date.now(),
   });
   if (!projectResult.ok) throw new Error('project setup failed');

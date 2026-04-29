@@ -65,7 +65,7 @@ export class ProjectTool {
   @Tool({
     name: 'project_create',
     description:
-      'Create a new project keyed by canonical absolute path. `name` defaults to the basename of `path`. Initialises empty knowledge + default PLOT.',
+      'Create a new project keyed by canonical absolute path. `name` defaults to the basename of `path`. Initialises default PLOT. Knowledge starts empty (no rows).',
     parameters: createProjectDto,
   })
   projectCreate(args: CreateProjectDto) {

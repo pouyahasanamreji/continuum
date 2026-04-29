@@ -1,100 +1,137 @@
 import { Injectable } from '@nestjs/common';
-import { applyPatch, parsePatch } from 'diff';
 import { Knowledge } from './domain/knowledge';
+import { KnowledgeServiceError } from '../common/errors/service-errors';
+import { SLUG_RE } from '../common/slug';
+import {
+  KnowledgeRepository,
+  KnowledgeUpdatePatch,
+} from './infrastructure/persistence/knowledge.repository';
 import { ProjectRepository } from '../project/infrastructure/persistence/project.repository';
-import { KnowledgeUpdateError } from '../common/errors/service-errors';
-import { KnowledgeRepository } from './infrastructure/persistence/knowledge.repository';
+import { AgentRepository } from '../agent/infrastructure/persistence/agent.repository';
+import { CreateKnowledgeDto } from './dto/create-knowledge.dto';
 import { UpdateKnowledgeDto } from './dto/update-knowledge.dto';
+import { QueryKnowledgeDto } from './dto/query-knowledge.dto';
 
-const HEADER_FROM_RE = /^---\s+a\/knowledge\.md(\s|$)/m;
-const HEADER_TO_RE = /^\+\+\+\s+b\/knowledge\.md(\s|$)/m;
+const SEARCH_DEFAULT_LIMIT = 10;
+const SEARCH_MAX_LIMIT = 50;
 
 @Injectable()
 export class KnowledgeService {
   constructor(
     private readonly repo: KnowledgeRepository,
     private readonly projectRepo: ProjectRepository,
+    private readonly agentRepo: AgentRepository,
   ) {}
 
   private resolveProjectIdOrThrow(projectPath: string): number {
     const id = this.projectRepo.findIdByPath(projectPath);
     if (id === null) {
-      throw new KnowledgeUpdateError('project_not_found', projectPath);
+      throw new KnowledgeServiceError('project_not_found', projectPath);
     }
     return id;
   }
 
-  findOne(projectPath: string): Knowledge | null {
+  private resolveAgentIdOrThrow(projectId: number, agentSlug: string): number {
+    const agent = this.agentRepo.findByProjectIdAndSlug(projectId, agentSlug);
+    if (!agent) {
+      throw new KnowledgeServiceError('agent_not_found', agentSlug);
+    }
+    return agent.id;
+  }
+
+  list(projectPath: string): Knowledge[] {
     const projectId = this.resolveProjectIdOrThrow(projectPath);
-    return this.repo.findByProjectId(projectId);
+    return this.repo.findAll(projectId);
   }
 
-  findBySection(projectPath: string, section: string): Knowledge | null {
-    const found = this.findOne(projectPath);
-    if (!found) return null;
-    const lines = found.content.split('\n');
-    const head = `## ${section}`;
-    let start = -1;
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i] === head) {
-        start = i;
-        break;
-      }
-    }
-    if (start === -1) return null;
-    let end = lines.length;
-    for (let i = start + 1; i < lines.length; i++) {
-      if (lines[i].startsWith('## ')) {
-        end = i;
-        break;
-      }
-    }
-    const sectionText = lines.slice(start, end).join('\n');
-    const k = new Knowledge();
-    Object.assign(k, found);
-    k.content = sectionText;
-    return k;
-  }
-
-  update(updateKnowledgeDto: UpdateKnowledgeDto): Knowledge {
-    const projectId = this.resolveProjectIdOrThrow(updateKnowledgeDto.project);
-    const unifiedDiff = updateKnowledgeDto.diff;
-    if (!HEADER_FROM_RE.test(unifiedDiff) || !HEADER_TO_RE.test(unifiedDiff)) {
-      throw new KnowledgeUpdateError('invalid_diff_headers');
-    }
-
-    const current = this.repo.findByProjectId(projectId);
-    if (!current) throw new KnowledgeUpdateError('no_current_content');
-
-    let parsed;
-    try {
-      parsed = parsePatch(unifiedDiff);
-    } catch (err) {
-      throw new KnowledgeUpdateError(
-        'parse_failed',
-        err instanceof Error ? err.message : String(err),
+  findManyWithPagination(query: QueryKnowledgeDto): Knowledge[] {
+    const projectId = this.resolveProjectIdOrThrow(query.project);
+    const filters = query.filters ?? null;
+    let agentId: number | null = null;
+    if (filters?.agentSlug) {
+      const agent = this.agentRepo.findByProjectIdAndSlug(
+        projectId,
+        filters.agentSlug,
       );
+      if (!agent) return [];
+      agentId = agent.id;
     }
-    if (!parsed.length)
-      throw new KnowledgeUpdateError('parse_failed', 'empty patch');
+    return this.repo.findManyWithPagination(projectId, {
+      filterOptions: { agentId, slug: filters?.slug ?? null },
+      sortOptions: query.sort ?? null,
+      paginationOptions: { page: query.page ?? 1, limit: query.limit ?? 10 },
+    });
+  }
 
-    const patch = parsed[0];
-    const newContent = applyPatch(current.content, patch, { fuzzFactor: 0 });
-    if (newContent === false) {
-      const firstHunk = patch.hunks[0];
-      const detail = firstHunk
-        ? `@@ -${firstHunk.oldStart},${firstHunk.oldLines} +${firstHunk.newStart},${firstHunk.newLines} @@`
-        : 'no hunks';
-      throw new KnowledgeUpdateError('hunk_mismatch', detail);
+  get(projectPath: string, slug: string): Knowledge | null {
+    const projectId = this.resolveProjectIdOrThrow(projectPath);
+    return this.repo.findByProjectIdAndSlug(projectId, slug);
+  }
+
+  create(dto: CreateKnowledgeDto): Knowledge {
+    const projectId = this.resolveProjectIdOrThrow(dto.project);
+    if (!SLUG_RE.test(dto.slug)) {
+      throw new KnowledgeServiceError('invalid_slug', dto.slug);
     }
-
-    this.repo.applyDiff(projectId, {
-      unifiedDiff,
-      newContent,
+    if (!SLUG_RE.test(dto.agentSlug)) {
+      throw new KnowledgeServiceError('invalid_slug', dto.agentSlug);
+    }
+    const agentId = this.resolveAgentIdOrThrow(projectId, dto.agentSlug);
+    const result = this.repo.create(projectId, {
+      agentId,
+      slug: dto.slug,
+      content: dto.content,
       now: Date.now(),
     });
-    const after = this.repo.findByProjectId(projectId);
-    if (!after) throw new KnowledgeUpdateError('no_current_content');
-    return after;
+    if (!result.ok) {
+      throw new KnowledgeServiceError('slug_conflict', dto.slug);
+    }
+    return result.knowledge;
+  }
+
+  update(slug: string, dto: UpdateKnowledgeDto): Knowledge {
+    const projectId = this.resolveProjectIdOrThrow(dto.project);
+    const existing = this.repo.findByProjectIdAndSlug(projectId, slug);
+    if (!existing) throw new KnowledgeServiceError('not_found', slug);
+
+    const now = Date.now();
+    const patch: KnowledgeUpdatePatch = { updatedAt: now };
+    let touched = false;
+
+    if (dto.agentSlug !== undefined) {
+      if (!SLUG_RE.test(dto.agentSlug)) {
+        throw new KnowledgeServiceError('invalid_slug', dto.agentSlug);
+      }
+      const agentId = this.resolveAgentIdOrThrow(projectId, dto.agentSlug);
+      patch.agentId = agentId;
+      touched = true;
+    }
+    if (dto.content !== undefined) {
+      patch.content = dto.content;
+      touched = true;
+    }
+
+    if (!touched) throw new KnowledgeServiceError('no_change', slug);
+
+    this.repo.update(existing.id, patch);
+    const updated = this.repo.findById(existing.id);
+    if (!updated) throw new KnowledgeServiceError('not_found', slug);
+    return updated;
+  }
+
+  remove(projectPath: string, slug: string): void {
+    const projectId = this.resolveProjectIdOrThrow(projectPath);
+    const existing = this.repo.findByProjectIdAndSlug(projectId, slug);
+    if (!existing) throw new KnowledgeServiceError('not_found', slug);
+    this.repo.remove(existing.id);
+  }
+
+  search(projectPath: string, query: string, limit?: number): Knowledge[] {
+    const projectId = this.resolveProjectIdOrThrow(projectPath);
+    const effectiveLimit = Math.min(
+      limit ?? SEARCH_DEFAULT_LIMIT,
+      SEARCH_MAX_LIMIT,
+    );
+    return this.repo.searchByContent(projectId, query, effectiveLimit);
   }
 }

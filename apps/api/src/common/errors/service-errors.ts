@@ -30,18 +30,24 @@ export class PlotServiceError extends Error {
   }
 }
 
-export class KnowledgeUpdateError extends Error {
+// `agent_not_found` is module-local; sibling modules use `not_found` for
+// parent-resource misses. Promote to a shared reason set in a future cleanup
+// if pattern recurs.
+export class KnowledgeServiceError extends Error {
   constructor(
     public readonly reason:
-      | 'invalid_diff_headers'
-      | 'parse_failed'
-      | 'hunk_mismatch'
-      | 'no_current_content'
-      | 'project_not_found',
+      | 'project_not_found'
+      | 'agent_not_found'
+      | 'slug_conflict'
+      | 'invalid_slug'
+      | 'not_found'
+      | 'no_change',
     public readonly detail?: string,
   ) {
-    super(`knowledge_update failed: ${reason}${detail ? ` (${detail})` : ''}`);
-    this.name = 'KnowledgeUpdateError';
+    super(
+      `knowledge operation failed: ${reason}${detail ? ` (${detail})` : ''}`,
+    );
+    this.name = 'KnowledgeServiceError';
   }
 }
 

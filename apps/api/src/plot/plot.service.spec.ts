@@ -40,7 +40,6 @@ function makeService(): {
         path,
         name: 'p',
         plotContent,
-        knowledgeContent: '',
         now: Date.now(),
       });
       if (!result.ok) throw new Error('project create failed');

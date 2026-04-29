@@ -1,6 +1,8 @@
 export interface KnowledgeEntity {
   id: number;
   project_id: number;
+  agent_id: number;
+  slug: string;
   content: string;
   created_at: number;
   updated_at: number;

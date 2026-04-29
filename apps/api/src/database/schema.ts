@@ -1,6 +1,9 @@
+// v6 → v7 is destructive-only. DB wipe authorised. No incremental ALTER path
+// exists because every existing knowledge row needs an agent_id we cannot
+// synthesise.
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION: number = 6;
+export const SCHEMA_VERSION: number = 7;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -30,24 +33,6 @@ CREATE TABLE IF NOT EXISTS plot_history (
 );
 CREATE INDEX IF NOT EXISTS idx_plot_history_project ON plot_history(project_id);
 
-CREATE TABLE IF NOT EXISTS knowledge (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  project_id INTEGER NOT NULL UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
-  content TEXT NOT NULL,
-  created_at INTEGER NOT NULL DEFAULT 0,
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER NULL
-);
-
-CREATE TABLE IF NOT EXISTS knowledge_history (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-  content TEXT NOT NULL,
-  applied_diff TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_knowledge_history_project ON knowledge_history(project_id);
-
 CREATE TABLE IF NOT EXISTS agents (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -72,6 +57,20 @@ CREATE TABLE IF NOT EXISTS agents (
 );
 CREATE INDEX IF NOT EXISTS idx_agents_project_status ON agents(project_id, status);
 
+-- agent_id CASCADE never fires directly (no agent hard-delete tool); transitive cascade only via project deletion.
+CREATE TABLE IF NOT EXISTS knowledge (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  agent_id   INTEGER NOT NULL REFERENCES agents(id)   ON DELETE CASCADE,
+  slug       TEXT NOT NULL,
+  content    TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  deleted_at INTEGER NULL,
+  UNIQUE(project_id, slug)
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_agent ON knowledge(agent_id);
+
 CREATE TABLE IF NOT EXISTS app_settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
@@ -81,7 +80,6 @@ CREATE TABLE IF NOT EXISTS app_settings (
 
 const DROP_LEGACY_SQL = `
 DROP TABLE IF EXISTS agents;
-DROP TABLE IF EXISTS knowledge_history;
 DROP TABLE IF EXISTS knowledge;
 DROP TABLE IF EXISTS plot_history;
 DROP TABLE IF EXISTS plots;
@@ -126,26 +124,6 @@ export function migrate(db: Database.Database): void {
           ALTER TABLE plots ADD COLUMN deleted_at INTEGER NULL;
         `);
         db.exec(SCHEMA_SQL);
-        db.pragma(`user_version = ${SCHEMA_VERSION}`);
-      });
-      tx.immediate();
-    } finally {
-      db.pragma('foreign_keys = ON');
-    }
-    return;
-  }
-
-  if (current === 5 && SCHEMA_VERSION === 6) {
-    db.pragma('foreign_keys = OFF');
-    try {
-      const tx = db.transaction(() => {
-        db.exec(`
-          CREATE TABLE IF NOT EXISTS app_settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL,
-            updated_at INTEGER NOT NULL
-          );
-        `);
         db.pragma(`user_version = ${SCHEMA_VERSION}`);
       });
       tx.immediate();

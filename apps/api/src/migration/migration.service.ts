@@ -81,8 +81,13 @@ export class MigrationService {
 
     let created = false;
     let plotUpdated = false;
-    let knowledgeUpdated = false;
+    const knowledgeUpdated = false;
     let agentsUpserted = 0;
+
+    if (input.knowledgeContent !== undefined)
+      warnings.push(
+        'knowledgeContent ignored: knowledge is now multi-row; module pending removal',
+      );
 
     const tx = db.transaction(() => {
       let projectId = this.projectRepo.findIdByPath(projectPath);
@@ -98,9 +103,6 @@ export class MigrationService {
         db.prepare(
           'INSERT INTO plots (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
         ).run(projectId, this.plot.defaultTemplate(), now, now);
-        db.prepare(
-          'INSERT INTO knowledge (project_id, content, created_at, updated_at) VALUES (?, ?, ?, ?)',
-        ).run(projectId, '', now, now);
       }
 
       if (input.plotContent !== undefined) {
@@ -119,25 +121,6 @@ export class MigrationService {
             'UPDATE plots SET content = ?, updated_at = ? WHERE project_id = ? AND deleted_at IS NULL',
           ).run(input.plotContent, now, projectId);
           plotUpdated = true;
-        }
-      }
-
-      if (input.knowledgeContent !== undefined) {
-        const current = db
-          .prepare<
-            [number],
-            { content: string }
-          >('SELECT content FROM knowledge WHERE project_id = ? AND deleted_at IS NULL')
-          .get(projectId);
-        const cur = current?.content ?? '';
-        if (cur !== input.knowledgeContent) {
-          db.prepare(
-            'INSERT INTO knowledge_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
-          ).run(projectId, input.knowledgeContent, '[migration]', now);
-          db.prepare(
-            'UPDATE knowledge SET content = ?, updated_at = ? WHERE project_id = ? AND deleted_at IS NULL',
-          ).run(input.knowledgeContent, now, projectId);
-          knowledgeUpdated = true;
         }
       }
 

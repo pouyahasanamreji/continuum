@@ -9,13 +9,27 @@ import {
 import { z } from 'zod';
 import { Knowledge } from '../domain/knowledge';
 
-export const getKnowledgeDto = z.object({
-  project: z.string(),
-  section: z.string().optional(),
-});
-export type GetKnowledgeDto = z.infer<typeof getKnowledgeDto>;
+export const listKnowledgeDto = z.object({ project: z.string() });
+export type ListKnowledgeDto = z.infer<typeof listKnowledgeDto>;
 
-export class FilterKnowledgeDto {}
+export const searchKnowledgeDto = z.object({
+  project: z.string(),
+  q: z.string().min(1),
+  limit: z.number().int().min(1).max(50).optional(),
+});
+export type SearchKnowledgeDto = z.infer<typeof searchKnowledgeDto>;
+
+export class FilterKnowledgeDto {
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  agentSlug?: string | null;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  slug?: string | null;
+}
 
 export class SortKnowledgeDto {
   @ApiProperty()
@@ -36,7 +50,7 @@ export class QueryKnowledgeDto {
   @ApiPropertyOptional({ type: String })
   @IsOptional()
   @IsString()
-  section?: string;
+  q?: string;
 
   @ApiPropertyOptional()
   @Transform(({ value }) => (value ? Number(value) : 1))
@@ -52,18 +66,28 @@ export class QueryKnowledgeDto {
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
-  @Transform(({ value }) =>
-    value ? plainToInstance(FilterKnowledgeDto, JSON.parse(value)) : undefined,
-  )
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    try {
+      return plainToInstance(FilterKnowledgeDto, JSON.parse(value));
+    } catch {
+      return undefined;
+    }
+  })
   @ValidateNested()
   @Type(() => FilterKnowledgeDto)
   filters?: FilterKnowledgeDto | null;
 
   @ApiPropertyOptional({ type: String })
   @IsOptional()
-  @Transform(({ value }) =>
-    value ? plainToInstance(SortKnowledgeDto, JSON.parse(value)) : undefined,
-  )
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    try {
+      return plainToInstance(SortKnowledgeDto, JSON.parse(value));
+    } catch {
+      return undefined;
+    }
+  })
   @ValidateNested({ each: true })
   @Type(() => SortKnowledgeDto)
   sort?: SortKnowledgeDto[] | null;
