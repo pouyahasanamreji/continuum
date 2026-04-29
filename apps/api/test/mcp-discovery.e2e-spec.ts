@@ -19,8 +19,12 @@ const EXPECTED_TOOLS = [
   'project_migrate',
   'plot',
   'plot_update',
+  'knowledge_list',
   'knowledge_get',
+  'knowledge_create',
   'knowledge_update',
+  'knowledge_delete',
+  'knowledge_search',
   'registry_list',
   'agent_get',
   'agent_create',
@@ -45,7 +49,7 @@ describe('MCP discovery (e2e)', () => {
     if (app) await app.close();
   });
 
-  it('registers exactly the expected 14 MCP tools', () => {
+  it('registers exactly the expected 18 MCP tools', () => {
     const moduleIds = discovery.getMcpModuleIds();
     expect(moduleIds.length).toBe(1);
     const tools = discovery.getTools(moduleIds[0]);
