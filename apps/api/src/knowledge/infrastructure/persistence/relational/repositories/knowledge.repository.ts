@@ -170,6 +170,30 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
     this.dbs.db.prepare('DELETE FROM knowledge WHERE id = ?').run(id);
   }
 
+  findAllForVectorize(
+    mode: 'missing' | 'all',
+  ): Array<{ id: number; content: string }> {
+    if (mode === 'all') {
+      return this.dbs.db
+        .prepare(
+          `SELECT id, content FROM knowledge WHERE deleted_at IS NULL ORDER BY id ASC`,
+        )
+        .all() as Array<{ id: number; content: string }>;
+    }
+    // mode 'missing': WHERE NOT EXISTS instead of LEFT JOIN — friendlier if
+    // knowledge_vec is mid-recreate.
+    return this.dbs.db
+      .prepare(
+        `SELECT id, content FROM knowledge
+         WHERE deleted_at IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM knowledge_vec WHERE knowledge_vec.knowledge_id = knowledge.id
+           )
+         ORDER BY id ASC`,
+      )
+      .all() as Array<{ id: number; content: string }>;
+  }
+
   // Plain LIKE %query%; ASCII case-insensitive only. % and _ in query act as
   // wildcards — caller-managed footgun. No FTS5.
   searchByContent(

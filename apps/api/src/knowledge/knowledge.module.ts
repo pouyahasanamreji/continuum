@@ -7,6 +7,7 @@ import { KnowledgeTool } from './knowledge.tool';
 import { KnowledgeController } from './knowledge.controller';
 import { RelationalKnowledgePersistenceModule } from './infrastructure/persistence/relational/relational-persistence.module';
 import { EmbedderModule } from '../embedder/embedder.module';
+import { AppSettingsModule } from '../app-settings/app-settings.module';
 
 const restEnabled = process.env.PANEL_REST_ENABLED === 'true';
 
@@ -16,6 +17,7 @@ const restEnabled = process.env.PANEL_REST_ENABLED === 'true';
     RelationalProjectPersistenceModule,
     RelationalAgentPersistenceModule,
     EmbedderModule,
+    AppSettingsModule,
     McpModule.forFeature([KnowledgeTool], 'continuum'),
   ],
   controllers: restEnabled ? [KnowledgeController] : [],

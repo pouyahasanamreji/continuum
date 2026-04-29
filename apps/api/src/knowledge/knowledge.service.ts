@@ -15,6 +15,11 @@ import { UpdateKnowledgeDto } from './dto/update-knowledge.dto';
 import { QueryKnowledgeDto } from './dto/query-knowledge.dto';
 import { EmbedderService } from '../embedder/embedder.service';
 import { EmbedderError } from '../embedder/embedder.error';
+import { AppSettingsService } from '../app-settings/app-settings.service';
+import {
+  VectorizeKnowledgeResultDto,
+  VectorizeStatusDto,
+} from './dto/vectorize-knowledge.dto';
 
 const SEARCH_DEFAULT_LIMIT = 10;
 const SEARCH_MAX_LIMIT = 50;
@@ -29,6 +34,7 @@ export class KnowledgeService {
     private readonly agentRepo: AgentRepository,
     private readonly embedder: EmbedderService,
     private readonly vecRepo: KnowledgeVectorRepository,
+    private readonly settings: AppSettingsService,
   ) {}
 
   private resolveProjectIdOrThrow(projectPath: string): number {
@@ -158,6 +164,52 @@ export class KnowledgeService {
           (err instanceof Error ? ` (${err.message})` : ''),
       );
     }
+  }
+
+  async vectorizeAll(opts: {
+    mode: 'missing' | 'all';
+    targetDim?: number;
+  }): Promise<VectorizeKnowledgeResultDto> {
+    const start = Date.now();
+    if (opts.mode === 'all') {
+      if (opts.targetDim !== undefined)
+        this.vecRepo.recreateTable(opts.targetDim);
+      else this.vecRepo.deleteAllRows();
+    }
+    const rows = this.repo.findAllForVectorize(opts.mode);
+    let processed = 0;
+    let skipped = 0;
+    let errors = 0;
+    for (const row of rows) {
+      if (!row.content || row.content.trim() === '') {
+        skipped++;
+        continue;
+      }
+      try {
+        const vec = await this.embedder.embed(row.content);
+        this.vecRepo.upsert(row.id, vec);
+        processed++;
+      } catch (err) {
+        errors++;
+        const reason = err instanceof EmbedderError ? err.reason : 'unknown';
+        this.logger.warn(
+          `knowledge ${row.id} vectorizeAll skipped: ${reason}` +
+            (err instanceof Error ? ` (${err.message})` : ''),
+        );
+      }
+    }
+    return { processed, skipped, errors, durationMs: Date.now() - start };
+  }
+
+  getVectorizeStatus(): VectorizeStatusDto {
+    const totalKnowledge = this.repo.findAllForVectorize('all').length;
+    const totalVectors = this.vecRepo.countRows();
+    const missing = this.repo.findAllForVectorize('missing').length;
+    const currentDim = this.vecRepo.currentDim();
+    const settingDim = this.settings.readAllForPanel().embedderDim ?? 0;
+    const stale =
+      settingDim !== 0 && settingDim !== currentDim ? totalVectors : 0;
+    return { totalKnowledge, totalVectors, missing, stale, currentDim };
   }
 
   search(
