@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   SETTING_ANTHROPIC_API_KEY,
   SETTING_ANTHROPIC_TOKENIZER_MODEL,
+  SETTING_EMBEDDER_URL,
   WhitelistedSettingKey,
 } from './app-settings.keys';
 import { AppSettingsRepository } from './infrastructure/persistence/app-settings.repository';
@@ -19,9 +20,11 @@ export class AppSettingsService {
   readAllForPanel() {
     const apiKey = this.repo.getValue(SETTING_ANTHROPIC_API_KEY);
     const model = this.repo.getValue(SETTING_ANTHROPIC_TOKENIZER_MODEL);
+    const embedderUrl = this.repo.getValue(SETTING_EMBEDDER_URL);
     return {
       anthropicApiKey: apiKey,
       anthropicTokenizerModel: model,
+      embedderUrl,
       effective: {
         anthropicApiKey: this.sourceFor(
           apiKey,
@@ -33,6 +36,7 @@ export class AppSettingsService {
           SETTING_ANTHROPIC_TOKENIZER_MODEL,
           'default',
         ),
+        embedderUrl: this.sourceFor(embedderUrl, SETTING_EMBEDDER_URL, 'unset'),
       },
     };
   }
@@ -40,12 +44,15 @@ export class AppSettingsService {
   applyPanelPatch(patch: {
     anthropicApiKey?: string;
     anthropicTokenizerModel?: string;
+    embedderUrl?: string;
   }) {
     const mapped: Partial<Record<WhitelistedSettingKey, string>> = {};
     if (patch.anthropicApiKey !== undefined)
       mapped[SETTING_ANTHROPIC_API_KEY] = patch.anthropicApiKey;
     if (patch.anthropicTokenizerModel !== undefined)
       mapped[SETTING_ANTHROPIC_TOKENIZER_MODEL] = patch.anthropicTokenizerModel;
+    if (patch.embedderUrl !== undefined)
+      mapped[SETTING_EMBEDDER_URL] = patch.embedderUrl;
     this.repo.applyPatch(mapped, Date.now());
   }
 
