@@ -133,13 +133,18 @@ export class KnowledgeTool {
   @Tool({
     name: 'knowledge_search',
     description:
-      'Substring search across knowledge lessons in `project`. At least one of `q` or `kind` is required. `q` matches `content` OR `slug` (case-insensitive ASCII). `kind: "fundamental"` filters to binding lessons that must be followed on every dispatch; `kind: "situational"` filters to context-specific lessons. Optional `limit` (default 10, max 50). Use this tool at Phase-1 Intake — first with `kind: "fundamental"` to load every binding rule, then with `q` for topical relevance.',
+      'Semantic vector search (cosine-equivalent ranking on L2-normalized embeddings) across knowledge lessons in `project`. Falls back to substring match when the embedder is unconfigured or unreachable. At least one of `q` or `kind` is required. `q` is a free-text semantic query (no SQL wildcards). `kind: "fundamental"` filters to binding lessons that must be followed on every dispatch; `kind: "situational"` filters to context-specific lessons. Optional `limit` (default 10, max 50). Use this tool at Phase-1 Intake — first with `kind: "fundamental"` to load every binding rule, then with `q` for topical relevance.',
     parameters: searchKnowledgeDto,
   })
-  knowledgeSearch(args: SearchKnowledgeDto) {
+  async knowledgeSearch(args: SearchKnowledgeDto) {
     try {
       return toolSuccess(
-        this.knowledge.search(args.project, args.q, args.kind, args.limit),
+        await this.knowledge.search(
+          args.project,
+          args.q,
+          args.kind,
+          args.limit,
+        ),
       );
     } catch (e) {
       return toolError(e);
