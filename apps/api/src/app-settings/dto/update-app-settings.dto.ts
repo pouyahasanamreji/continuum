@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class UpdateAppSettingsDto {
   @ApiPropertyOptional({ type: String })
@@ -16,4 +16,16 @@ export class UpdateAppSettingsDto {
   @IsOptional()
   @IsString()
   embedderUrl?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  embedderModel?: string;
+
+  @ApiPropertyOptional({ type: Number, minimum: 1, maximum: 4096 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4096)
+  embedderDim?: number;
 }
