@@ -1,7 +1,7 @@
 ---
 import PanelLayout from "@/layouts/PanelLayout.astro";
-import { MarkdownViewer } from "@/components/panel/MarkdownViewer";
+import { KnowledgePage } from "@/components/panel/knowledge/KnowledgePage";
 ---
 <PanelLayout activeRoute="/knowledge" title="Knowledge">
-  <MarkdownViewer client:load endpoint="knowledge" />
+  <KnowledgePage client:load />
 </PanelLayout>
