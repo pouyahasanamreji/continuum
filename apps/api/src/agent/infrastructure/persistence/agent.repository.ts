@@ -30,22 +30,6 @@ export interface AgentUpdatePatch {
   updatedAt: number;
 }
 
-export interface AgentMigrationPayload {
-  branch: string;
-  worktree: string;
-  reservedPaths: string[];
-  request: string;
-  plan: string;
-  implPrompt: string;
-  coordinationBrief: string;
-  postMergeNotes: string;
-  status: AgentStatusEnum;
-  dispatchedAt: number | null;
-  mergedAt: number | null;
-  mergedCommit: string | null;
-  now: number;
-}
-
 export type AgentCreateResult =
   | { ok: true; agent: Agent }
   | { ok: false; reason: 'slug_conflict' };
@@ -66,9 +50,4 @@ export abstract class AgentRepository {
     payload: AgentCreatePayload,
   ): AgentCreateResult;
   abstract update(id: number, patch: AgentUpdatePatch): void;
-  abstract upsertFromMigration(
-    projectId: number,
-    slug: string,
-    payload: AgentMigrationPayload,
-  ): void;
 }
