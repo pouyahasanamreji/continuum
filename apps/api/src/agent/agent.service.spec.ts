@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import { AgentService } from './agent.service';
 import { AgentServiceError } from '../common/errors/service-errors';
 import { OrchestratorDbService } from '../database/orchestrator-db.service';
@@ -10,6 +11,16 @@ import { AgentStatusEnum } from '../agent-statuses/agent-statuses.enum';
 
 class StubDb {
   constructor(public readonly db: Database.Database) {}
+}
+
+function loadVec(db: Database.Database): void {
+  if (typeof (sqliteVec as { load?: unknown }).load === 'function') {
+    (sqliteVec as { load: (d: Database.Database) => void }).load(db);
+  } else {
+    db.loadExtension(
+      (sqliteVec as { getLoadablePath: () => string }).getLoadablePath(),
+    );
+  }
 }
 
 const PROJECT_PATH = '/Users/foo/proj';
@@ -27,6 +38,7 @@ function makeHarness(): Harness {
   const db = new Database(':memory:');
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
+  loadVec(db);
   migrate(db);
 
   const dbs = new StubDb(db) as unknown as OrchestratorDbService;

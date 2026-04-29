@@ -9,6 +9,7 @@ import { PlotModule } from './plot/plot.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { AgentModule } from './agent/agent.module';
 import { TokenizerModule } from './tokenizer/tokenizer.module';
+import { EmbedderModule } from './embedder/embedder.module';
 import { AppSettingsModule } from './app-settings/app-settings.module';
 
 @Module({
@@ -28,6 +29,7 @@ import { AppSettingsModule } from './app-settings/app-settings.module';
     KnowledgeModule,
     AgentModule,
     TokenizerModule,
+    EmbedderModule,
     AppSettingsModule,
   ],
   controllers: [AppController],

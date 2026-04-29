@@ -11,4 +11,9 @@ export class UpdateAppSettingsDto {
   @IsOptional()
   @IsString()
   anthropicTokenizerModel?: string;
+
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  embedderUrl?: string;
 }

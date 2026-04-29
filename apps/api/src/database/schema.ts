@@ -3,7 +3,7 @@
 // synthesise.
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION: number = 8;
+export const SCHEMA_VERSION: number = 9;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -78,10 +78,22 @@ CREATE TABLE IF NOT EXISTS app_settings (
   value TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vec USING vec0(
+  knowledge_id INTEGER PRIMARY KEY,
+  embedding FLOAT[768]
+);
+
+CREATE TRIGGER IF NOT EXISTS knowledge_vec_cleanup
+AFTER DELETE ON knowledge
+BEGIN
+  DELETE FROM knowledge_vec WHERE knowledge_id = OLD.id;
+END;
 `;
 
 const DROP_LEGACY_SQL = `
 DROP TABLE IF EXISTS agents;
+DROP TABLE IF EXISTS knowledge_vec;
 DROP TABLE IF EXISTS knowledge;
 DROP TABLE IF EXISTS plot_history;
 DROP TABLE IF EXISTS plots;
@@ -144,6 +156,20 @@ export function migrate(db: Database.Database): void {
             `DEFAULT 'situational' ` +
             `CHECK (kind IN ('fundamental','situational'));`,
         );
+        db.exec(SCHEMA_SQL);
+        db.pragma(`user_version = ${SCHEMA_VERSION}`);
+      });
+      tx.immediate();
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+    return;
+  }
+
+  if (current === 8 && SCHEMA_VERSION === 9) {
+    db.pragma('foreign_keys = OFF');
+    try {
+      const tx = db.transaction(() => {
         db.exec(SCHEMA_SQL);
         db.pragma(`user_version = ${SCHEMA_VERSION}`);
       });

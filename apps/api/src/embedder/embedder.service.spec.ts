@@ -1,0 +1,144 @@
+import { EmbedderService } from './embedder.service';
+import { EmbedderError } from './embedder.error';
+import { AppSettingsService } from '../app-settings/app-settings.service';
+
+function jsonResponse(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+class StubAppSettings {
+  constructor(private store: Map<string, string | null> = new Map()) {}
+  resolve(key: string): string | null {
+    const fromStore = this.store.has(key)
+      ? (this.store.get(key) ?? null)
+      : null;
+    if (fromStore !== null && fromStore !== '') return fromStore;
+    return process.env[key] ?? null;
+  }
+}
+
+const make = (store?: Map<string, string | null>) =>
+  new EmbedderService(
+    new StubAppSettings(store) as unknown as AppSettingsService,
+  );
+
+type FetchInput = Parameters<typeof fetch>[0];
+type FetchInit = Parameters<typeof fetch>[1];
+
+describe('EmbedderService', () => {
+  let savedUrl: string | undefined;
+  let fetchSpy: jest.SpiedFunction<typeof fetch>;
+
+  beforeEach(() => {
+    savedUrl = process.env.EMBEDDER_URL;
+    delete process.env.EMBEDDER_URL;
+    fetchSpy = jest.spyOn(globalThis, 'fetch');
+  });
+
+  afterEach(() => {
+    if (savedUrl === undefined) delete process.env.EMBEDDER_URL;
+    else process.env.EMBEDDER_URL = savedUrl;
+    fetchSpy.mockRestore();
+  });
+
+  it('throws url_missing when DB and env both unset', async () => {
+    const service = make();
+    await expect(service.embed('hello')).rejects.toMatchObject({
+      name: 'EmbedderError',
+      reason: 'url_missing',
+    });
+    await expect(service.embed('hello')).rejects.toBeInstanceOf(EmbedderError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('throws upstream_rejected on non-2xx response', async () => {
+    const service = make(new Map([['EMBEDDER_URL', 'http://x/embed']]));
+    fetchSpy.mockResolvedValue(jsonResponse(500, { error: 'boom' }));
+    await expect(service.embed('hello')).rejects.toMatchObject({
+      name: 'EmbedderError',
+      reason: 'upstream_rejected',
+      detail: '500',
+    });
+  });
+
+  it('throws upstream_failed on network error', async () => {
+    const service = make(new Map([['EMBEDDER_URL', 'http://x/embed']]));
+    fetchSpy.mockRejectedValue(new Error('econnrefused'));
+    await expect(service.embed('hello')).rejects.toMatchObject({
+      name: 'EmbedderError',
+      reason: 'upstream_failed',
+    });
+  });
+
+  it('throws bad_response_shape when embeddings missing', async () => {
+    const service = make(new Map([['EMBEDDER_URL', 'http://x/embed']]));
+    fetchSpy.mockResolvedValue(jsonResponse(200, {}));
+    await expect(service.embed('hello')).rejects.toMatchObject({
+      reason: 'bad_response_shape',
+    });
+  });
+
+  it('throws bad_response_shape when embeddings empty', async () => {
+    const service = make(new Map([['EMBEDDER_URL', 'http://x/embed']]));
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[]] }));
+    await expect(service.embed('hello')).rejects.toMatchObject({
+      reason: 'bad_response_shape',
+    });
+  });
+
+  it('throws bad_response_shape when embedding values non-numeric', async () => {
+    const service = make(new Map([['EMBEDDER_URL', 'http://x/embed']]));
+    fetchSpy.mockResolvedValue(
+      jsonResponse(200, { embeddings: [['not-a-number']] }),
+    );
+    await expect(service.embed('hello')).rejects.toMatchObject({
+      reason: 'bad_response_shape',
+    });
+  });
+
+  it('returns embedding vector on 2xx', async () => {
+    const service = make(new Map([['EMBEDDER_URL', 'http://x/embed']]));
+    const vec = [0.1, 0.2, 0.3];
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [vec] }));
+    await expect(service.embed('hello')).resolves.toEqual(vec);
+  });
+
+  it('posts model=embeddinggemma + input=text body to URL exactly', async () => {
+    const service = make(new Map([['EMBEDDER_URL', 'http://x/embed']]));
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[0.1]] }));
+    await service.embed('the-text');
+    const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
+    expect(calls[0][0]).toBe('http://x/embed');
+    const init = calls[0][1] as RequestInit;
+    expect(init.method).toBe('POST');
+    expect((init.headers as Record<string, string>)['content-type']).toBe(
+      'application/json',
+    );
+    const body = JSON.parse(init.body as string) as {
+      model: string;
+      input: string;
+    };
+    expect(body).toEqual({ model: 'embeddinggemma', input: 'the-text' });
+  });
+
+  it('DB URL wins over env', async () => {
+    process.env.EMBEDDER_URL = 'http://env';
+    const service = make(new Map([['EMBEDDER_URL', 'http://db']]));
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[0.1]] }));
+    await service.embed('hi');
+    const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
+    expect(calls[0][0]).toBe('http://db');
+  });
+
+  it('falls back to env URL when DB empty string', async () => {
+    process.env.EMBEDDER_URL = 'http://env';
+    const service = make(new Map([['EMBEDDER_URL', '']]));
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[0.1]] }));
+    await service.embed('hi');
+    const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
+    expect(calls[0][0]).toBe('http://env');
+  });
+});

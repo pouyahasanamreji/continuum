@@ -5,6 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import { dirname } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { migrate } from './schema';
@@ -21,6 +22,13 @@ export class OrchestratorDbService implements OnModuleInit, OnModuleDestroy {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     db.pragma('busy_timeout = 5000');
+    if (typeof (sqliteVec as { load?: unknown }).load === 'function') {
+      (sqliteVec as { load: (d: Database.Database) => void }).load(db);
+    } else {
+      db.loadExtension(
+        (sqliteVec as { getLoadablePath: () => string }).getLoadablePath(),
+      );
+    }
     migrate(db);
     this._db = db;
     this.logger.log(`Opened SQLite at ${path}`);
