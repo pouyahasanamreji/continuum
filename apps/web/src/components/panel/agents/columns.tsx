@@ -109,6 +109,19 @@ export const columns: ColumnDef<AgentFull>[] = [
     },
   },
   {
+    accessorFn: (row) => row.createdAt,
+    id: "createdAt",
+    header: sortHeader("Created"),
+    cell: ({ row }) => (
+      <span className="text-xs">
+        {dateFmt.format(new Date(row.original.createdAt))}
+      </span>
+    ),
+    sortingFn: (a, b) =>
+      new Date(a.original.createdAt).getTime() -
+      new Date(b.original.createdAt).getTime(),
+  },
+  {
     accessorFn: (row) => row.updatedAt,
     id: "updatedAt",
     header: sortHeader("Updated"),
