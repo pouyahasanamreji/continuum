@@ -10,9 +10,38 @@ import { ProjectRelationalRepository } from '../project/infrastructure/persisten
 import { AgentRelationalRepository } from '../agent/infrastructure/persistence/relational/repositories/agent.repository';
 import { EmbedderService } from '../embedder/embedder.service';
 import { EmbedderError } from '../embedder/embedder.error';
+import { AppSettingsService } from '../app-settings/app-settings.service';
 
 class StubDb {
   constructor(public readonly db: Database.Database) {}
+}
+
+class StubAppSettings {
+  constructor(public store: Map<string, string | null> = new Map()) {}
+  resolve(key: string): string | null {
+    const v = this.store.has(key) ? (this.store.get(key) ?? null) : null;
+    if (v !== null && v !== '') return v;
+    return process.env[key] ?? null;
+  }
+  readAllForPanel() {
+    const dimRaw = this.resolve('EMBEDDER_DIM');
+    const dim =
+      dimRaw === null || dimRaw === '' ? null : Number.parseInt(dimRaw, 10);
+    return {
+      anthropicApiKey: null,
+      anthropicTokenizerModel: null,
+      embedderUrl: null,
+      embedderModel: this.resolve('EMBEDDER_MODEL'),
+      embedderDim: Number.isNaN(dim ?? NaN) ? null : dim,
+      effective: {
+        anthropicApiKey: 'unset' as const,
+        anthropicTokenizerModel: 'default' as const,
+        embedderUrl: 'unset' as const,
+        embedderModel: 'default' as const,
+        embedderDim: 'default' as const,
+      },
+    };
+  }
 }
 
 function loadVec(db: Database.Database): void {
@@ -34,6 +63,7 @@ interface Harness {
   projectRepo: ProjectRelationalRepository;
   agentRepo: AgentRelationalRepository;
   embedder: { embed: jest.Mock };
+  settings: StubAppSettings;
   db: Database.Database;
   agentId: (slug: string) => number;
   seedAgent: (slug: string) => number;
@@ -80,12 +110,14 @@ function makeHarness(): Harness {
   const embedder = {
     embed: jest.fn().mockResolvedValue(new Array(768).fill(0.1)),
   };
+  const settings = new StubAppSettings();
   const service = new KnowledgeService(
     knowledgeRepo,
     projectRepo,
     agentRepo,
     embedder as unknown as EmbedderService,
     vecRepo,
+    settings as unknown as AppSettingsService,
   );
 
   return {
@@ -95,6 +127,7 @@ function makeHarness(): Harness {
     projectRepo,
     agentRepo,
     embedder,
+    settings,
     db,
     seedAgent,
     agentId: (slug: string) => {
@@ -774,5 +807,170 @@ describe('KnowledgeService vectorization', () => {
         }
       ).c,
     ).toBe(0);
+  });
+});
+
+describe('KnowledgeService.vectorizeAll', () => {
+  it('mode=missing skips already-vectorized rows', async () => {
+    const { service, seedAgent, embedder, db } = makeHarness();
+    seedAgent('alpha');
+    for (const slug of ['a', 'b', 'c']) {
+      await service.create({
+        project: PROJECT_PATH,
+        agentSlug: 'alpha',
+        slug,
+        content: `body-${slug}`,
+      });
+    }
+    // Wipe two of three vec rows so missing-mode has work to do.
+    db.prepare(
+      `DELETE FROM knowledge_vec WHERE knowledge_id IN
+       (SELECT id FROM knowledge WHERE slug IN ('b', 'c'))`,
+    ).run();
+    embedder.embed.mockClear();
+    const result = await service.vectorizeAll({ mode: 'missing' });
+    expect(result.processed).toBe(2);
+    expect(result.errors).toBe(0);
+    expect(result.skipped).toBe(0);
+    expect(embedder.embed).toHaveBeenCalledTimes(2);
+    const c = (
+      db.prepare('SELECT COUNT(*) AS c FROM knowledge_vec').get() as {
+        c: number;
+      }
+    ).c;
+    expect(c).toBe(3);
+  });
+
+  it('mode=all without targetDim deletes existing vec rows and re-embeds all', async () => {
+    const { service, seedAgent, embedder, db } = makeHarness();
+    seedAgent('alpha');
+    for (const slug of ['a', 'b']) {
+      await service.create({
+        project: PROJECT_PATH,
+        agentSlug: 'alpha',
+        slug,
+        content: `body-${slug}`,
+      });
+    }
+    embedder.embed.mockClear();
+    const result = await service.vectorizeAll({ mode: 'all' });
+    expect(result.processed).toBe(2);
+    expect(embedder.embed).toHaveBeenCalledTimes(2);
+    const c = (
+      db.prepare('SELECT COUNT(*) AS c FROM knowledge_vec').get() as {
+        c: number;
+      }
+    ).c;
+    expect(c).toBe(2);
+  });
+
+  it('mode=all with targetDim=512 recreates table at 512 and trigger still fires', async () => {
+    const { service, seedAgent, vecRepo, embedder, db } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'one',
+      content: 'body',
+    });
+    embedder.embed.mockResolvedValue(new Array(512).fill(0.5));
+    const result = await service.vectorizeAll({
+      mode: 'all',
+      targetDim: 512,
+    });
+    expect(result.processed).toBe(1);
+    expect(vecRepo.currentDim()).toBe(512);
+    const sql = (
+      db
+        .prepare(
+          `SELECT sql FROM sqlite_master WHERE type='table' AND name='knowledge_vec'`,
+        )
+        .get() as { sql: string }
+    ).sql;
+    expect(sql).toMatch(/FLOAT\[512\]/);
+    // Trigger fires: deleting the knowledge row removes the vec row.
+    service.remove(PROJECT_PATH, 'one');
+    const c = (
+      db.prepare('SELECT COUNT(*) AS c FROM knowledge_vec').get() as {
+        c: number;
+      }
+    ).c;
+    expect(c).toBe(0);
+  });
+
+  it('continues past embedder errors', async () => {
+    const { service, seedAgent, embedder } = makeHarness();
+    seedAgent('alpha');
+    for (const slug of ['a', 'b', 'c']) {
+      await service.create({
+        project: PROJECT_PATH,
+        agentSlug: 'alpha',
+        slug,
+        content: `body-${slug}`,
+      });
+    }
+    embedder.embed.mockReset();
+    embedder.embed
+      .mockResolvedValueOnce(new Array(768).fill(0.1))
+      .mockRejectedValueOnce(new EmbedderError('upstream_failed', 'boom'))
+      .mockResolvedValueOnce(new Array(768).fill(0.1));
+    const result = await service.vectorizeAll({ mode: 'all' });
+    expect(result.processed).toBe(2);
+    expect(result.errors).toBe(1);
+  });
+});
+
+describe('KnowledgeService.getVectorizeStatus', () => {
+  it('reports correct totals/missing/currentDim', async () => {
+    const { service, seedAgent, db } = makeHarness();
+    seedAgent('alpha');
+    for (const slug of ['a', 'b']) {
+      await service.create({
+        project: PROJECT_PATH,
+        agentSlug: 'alpha',
+        slug,
+        content: `body-${slug}`,
+      });
+    }
+    db.prepare(
+      `DELETE FROM knowledge_vec WHERE knowledge_id IN
+       (SELECT id FROM knowledge WHERE slug = 'b')`,
+    ).run();
+    const status = service.getVectorizeStatus();
+    expect(status.totalKnowledge).toBe(2);
+    expect(status.totalVectors).toBe(1);
+    expect(status.missing).toBe(1);
+    expect(status.currentDim).toBe(768);
+    expect(status.stale).toBe(0);
+  });
+
+  it('reports stale=totalVectors when EMBEDDER_DIM differs from currentDim', async () => {
+    const { service, seedAgent, settings } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'a',
+      content: 'body',
+    });
+    settings.store.set('EMBEDDER_DIM', '512');
+    const status = service.getVectorizeStatus();
+    expect(status.currentDim).toBe(768);
+    expect(status.totalVectors).toBe(1);
+    expect(status.stale).toBe(1);
+  });
+
+  it('reports stale=0 when EMBEDDER_DIM matches currentDim', async () => {
+    const { service, seedAgent, settings } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'a',
+      content: 'body',
+    });
+    settings.store.set('EMBEDDER_DIM', '768');
+    const status = service.getVectorizeStatus();
+    expect(status.stale).toBe(0);
   });
 });

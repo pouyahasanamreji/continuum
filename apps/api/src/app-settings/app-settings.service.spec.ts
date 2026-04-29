@@ -3,6 +3,8 @@ import { AppSettingsRepository } from './infrastructure/persistence/app-settings
 import {
   SETTING_ANTHROPIC_API_KEY,
   SETTING_ANTHROPIC_TOKENIZER_MODEL,
+  SETTING_EMBEDDER_DIM,
+  SETTING_EMBEDDER_MODEL,
   SETTING_EMBEDDER_URL,
 } from './app-settings.keys';
 
@@ -15,6 +17,8 @@ describe('AppSettingsService', () => {
   let savedKey: string | undefined;
   let savedModel: string | undefined;
   let savedEmbedder: string | undefined;
+  let savedEmbedderModel: string | undefined;
+  let savedEmbedderDim: string | undefined;
 
   beforeEach(() => {
     getValue = jest.fn();
@@ -31,9 +35,13 @@ describe('AppSettingsService', () => {
     savedKey = process.env.ANTHROPIC_API_KEY;
     savedModel = process.env.ANTHROPIC_TOKENIZER_MODEL;
     savedEmbedder = process.env.EMBEDDER_URL;
+    savedEmbedderModel = process.env.EMBEDDER_MODEL;
+    savedEmbedderDim = process.env.EMBEDDER_DIM;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_TOKENIZER_MODEL;
     delete process.env.EMBEDDER_URL;
+    delete process.env.EMBEDDER_MODEL;
+    delete process.env.EMBEDDER_DIM;
   });
 
   afterEach(() => {
@@ -43,6 +51,10 @@ describe('AppSettingsService', () => {
     else process.env.ANTHROPIC_TOKENIZER_MODEL = savedModel;
     if (savedEmbedder === undefined) delete process.env.EMBEDDER_URL;
     else process.env.EMBEDDER_URL = savedEmbedder;
+    if (savedEmbedderModel === undefined) delete process.env.EMBEDDER_MODEL;
+    else process.env.EMBEDDER_MODEL = savedEmbedderModel;
+    if (savedEmbedderDim === undefined) delete process.env.EMBEDDER_DIM;
+    else process.env.EMBEDDER_DIM = savedEmbedderDim;
   });
 
   it('applyPanelPatch maps camelCase to env-var keys', () => {
@@ -65,6 +77,22 @@ describe('AppSettingsService', () => {
     });
     expect(applyPatch).toHaveBeenCalledWith(
       { [SETTING_EMBEDDER_URL]: 'http://localhost:11434/api/embed' },
+      expect.any(Number),
+    );
+  });
+
+  it('applyPanelPatch maps embedderModel to EMBEDDER_MODEL', () => {
+    service.applyPanelPatch({ embedderModel: 'mxbai-embed-large' });
+    expect(applyPatch).toHaveBeenCalledWith(
+      { [SETTING_EMBEDDER_MODEL]: 'mxbai-embed-large' },
+      expect.any(Number),
+    );
+  });
+
+  it('applyPanelPatch stringifies embedderDim before storage', () => {
+    service.applyPanelPatch({ embedderDim: 512 });
+    expect(applyPatch).toHaveBeenCalledWith(
+      { [SETTING_EMBEDDER_DIM]: '512' },
       expect.any(Number),
     );
   });
@@ -106,10 +134,14 @@ describe('AppSettingsService', () => {
       anthropicApiKey: 'db',
       anthropicTokenizerModel: 'env',
       embedderUrl: 'unset',
+      embedderModel: 'default',
+      embedderDim: 'default',
     });
     expect(result.anthropicApiKey).toBe('sk-db');
     expect(result.anthropicTokenizerModel).toBeNull();
     expect(result.embedderUrl).toBeNull();
+    expect(result.embedderModel).toBeNull();
+    expect(result.embedderDim).toBeNull();
 
     getValue.mockReturnValue(null);
     delete process.env.ANTHROPIC_TOKENIZER_MODEL;
@@ -118,6 +150,8 @@ describe('AppSettingsService', () => {
       anthropicApiKey: 'unset',
       anthropicTokenizerModel: 'default',
       embedderUrl: 'unset',
+      embedderModel: 'default',
+      embedderDim: 'default',
     });
   });
 
@@ -135,5 +169,61 @@ describe('AppSettingsService', () => {
 
     delete process.env.EMBEDDER_URL;
     expect(service.readAllForPanel().effective.embedderUrl).toBe('unset');
+  });
+
+  it('readAllForPanel reports embedderModel effective: db / env / default with DB > env precedence', () => {
+    getValue.mockImplementation((k: string) =>
+      k === SETTING_EMBEDDER_MODEL ? 'db-model' : null,
+    );
+    process.env.EMBEDDER_MODEL = 'env-model';
+    let result = service.readAllForPanel();
+    expect(result.effective.embedderModel).toBe('db');
+    expect(result.embedderModel).toBe('db-model');
+
+    getValue.mockReturnValue(null);
+    result = service.readAllForPanel();
+    expect(result.effective.embedderModel).toBe('env');
+    expect(result.embedderModel).toBeNull();
+
+    delete process.env.EMBEDDER_MODEL;
+    result = service.readAllForPanel();
+    expect(result.effective.embedderModel).toBe('default');
+  });
+
+  it('readAllForPanel parses embedderDim integer; null on NaN/empty', () => {
+    getValue.mockImplementation((k: string) =>
+      k === SETTING_EMBEDDER_DIM ? '512' : null,
+    );
+    expect(service.readAllForPanel().embedderDim).toBe(512);
+
+    getValue.mockImplementation((k: string) =>
+      k === SETTING_EMBEDDER_DIM ? 'not-a-number' : null,
+    );
+    expect(service.readAllForPanel().embedderDim).toBeNull();
+
+    getValue.mockImplementation((k: string) =>
+      k === SETTING_EMBEDDER_DIM ? '' : null,
+    );
+    expect(service.readAllForPanel().embedderDim).toBeNull();
+  });
+
+  it('readAllForPanel embedderDim DB > env > default precedence', () => {
+    getValue.mockImplementation((k: string) =>
+      k === SETTING_EMBEDDER_DIM ? '256' : null,
+    );
+    process.env.EMBEDDER_DIM = '1024';
+    let result = service.readAllForPanel();
+    expect(result.effective.embedderDim).toBe('db');
+    expect(result.embedderDim).toBe(256);
+
+    getValue.mockReturnValue(null);
+    result = service.readAllForPanel();
+    expect(result.effective.embedderDim).toBe('env');
+    expect(result.embedderDim).toBe(1024);
+
+    delete process.env.EMBEDDER_DIM;
+    result = service.readAllForPanel();
+    expect(result.effective.embedderDim).toBe('default');
+    expect(result.embedderDim).toBeNull();
   });
 });

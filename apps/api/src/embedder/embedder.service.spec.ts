@@ -30,17 +30,22 @@ type FetchInit = Parameters<typeof fetch>[1];
 
 describe('EmbedderService', () => {
   let savedUrl: string | undefined;
+  let savedModel: string | undefined;
   let fetchSpy: jest.SpiedFunction<typeof fetch>;
 
   beforeEach(() => {
     savedUrl = process.env.EMBEDDER_URL;
+    savedModel = process.env.EMBEDDER_MODEL;
     delete process.env.EMBEDDER_URL;
+    delete process.env.EMBEDDER_MODEL;
     fetchSpy = jest.spyOn(globalThis, 'fetch');
   });
 
   afterEach(() => {
     if (savedUrl === undefined) delete process.env.EMBEDDER_URL;
     else process.env.EMBEDDER_URL = savedUrl;
+    if (savedModel === undefined) delete process.env.EMBEDDER_MODEL;
+    else process.env.EMBEDDER_MODEL = savedModel;
     fetchSpy.mockRestore();
   });
 
@@ -140,5 +145,50 @@ describe('EmbedderService', () => {
     await service.embed('hi');
     const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
     expect(calls[0][0]).toBe('http://env');
+  });
+
+  it('DB-set EMBEDDER_MODEL overrides default', async () => {
+    const service = make(
+      new Map([
+        ['EMBEDDER_URL', 'http://x/embed'],
+        ['EMBEDDER_MODEL', 'mxbai-embed-large'],
+      ]),
+    );
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[0.1]] }));
+    await service.embed('hi');
+    const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
+    const body = JSON.parse((calls[0][1] as RequestInit).body as string) as {
+      model: string;
+    };
+    expect(body.model).toBe('mxbai-embed-large');
+  });
+
+  it('env-set EMBEDDER_MODEL overrides default when DB unset', async () => {
+    process.env.EMBEDDER_MODEL = 'env-model';
+    const service = make(new Map([['EMBEDDER_URL', 'http://x/embed']]));
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[0.1]] }));
+    await service.embed('hi');
+    const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
+    const body = JSON.parse((calls[0][1] as RequestInit).body as string) as {
+      model: string;
+    };
+    expect(body.model).toBe('env-model');
+  });
+
+  it('DB EMBEDDER_MODEL wins over env', async () => {
+    process.env.EMBEDDER_MODEL = 'env-model';
+    const service = make(
+      new Map([
+        ['EMBEDDER_URL', 'http://x/embed'],
+        ['EMBEDDER_MODEL', 'db-model'],
+      ]),
+    );
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[0.1]] }));
+    await service.embed('hi');
+    const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
+    const body = JSON.parse((calls[0][1] as RequestInit).body as string) as {
+      model: string;
+    };
+    expect(body.model).toBe('db-model');
   });
 });

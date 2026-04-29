@@ -62,4 +62,7 @@ export abstract class KnowledgeRepository {
     kind: KnowledgeKindEnum | undefined,
     limit: number,
   ): Knowledge[];
+  abstract findAllForVectorize(
+    mode: 'missing' | 'all',
+  ): Array<{ id: number; content: string }>;
 }

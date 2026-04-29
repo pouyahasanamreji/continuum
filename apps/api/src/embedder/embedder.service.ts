@@ -1,9 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EmbedderError } from './embedder.error';
 import { AppSettingsService } from '../app-settings/app-settings.service';
-import { SETTING_EMBEDDER_URL } from '../app-settings/app-settings.keys';
+import {
+  SETTING_EMBEDDER_MODEL,
+  SETTING_EMBEDDER_URL,
+} from '../app-settings/app-settings.keys';
 
-const MODEL = 'embeddinggemma';
+const DEFAULT_MODEL = 'embeddinggemma';
 const TIMEOUT_MS = 30_000;
 
 @Injectable()
@@ -15,13 +18,15 @@ export class EmbedderService {
   async embed(text: string): Promise<number[]> {
     const url = this.settings.resolve(SETTING_EMBEDDER_URL);
     if (!url) throw new EmbedderError('url_missing');
+    const model =
+      this.settings.resolve(SETTING_EMBEDDER_MODEL) ?? DEFAULT_MODEL;
 
     let response: Response;
     try {
       response = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ model: MODEL, input: text }),
+        body: JSON.stringify({ model, input: text }),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
     } catch (err) {

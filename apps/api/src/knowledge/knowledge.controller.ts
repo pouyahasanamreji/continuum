@@ -25,6 +25,11 @@ import { Knowledge } from './domain/knowledge';
 import { CreateKnowledgeDto } from './dto/create-knowledge.dto';
 import { UpdateKnowledgeDto } from './dto/update-knowledge.dto';
 import { QueryKnowledgeDto } from './dto/query-knowledge.dto';
+import {
+  VectorizeKnowledgeDto,
+  VectorizeKnowledgeResultDto,
+  VectorizeStatusDto,
+} from './dto/vectorize-knowledge.dto';
 import { KnowledgeKindEnum } from '../knowledge-kinds/knowledge-kinds.enum';
 import {
   InfinityPaginationResponse,
@@ -100,6 +105,22 @@ export class KnowledgeController {
     } catch (e) {
       mapServiceError(e);
     }
+  }
+
+  @Post('knowledge/vectorize')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: VectorizeKnowledgeResultDto })
+  async vectorize(
+    @Body() body: VectorizeKnowledgeDto,
+  ): Promise<VectorizeKnowledgeResultDto> {
+    return this.knowledge.vectorizeAll(body);
+  }
+
+  @Get('knowledge/vectorize-status')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: VectorizeStatusDto })
+  getVectorizeStatus(): VectorizeStatusDto {
+    return this.knowledge.getVectorizeStatus();
   }
 
   @Get('knowledge/:slug')
