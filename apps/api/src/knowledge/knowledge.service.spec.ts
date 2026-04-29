@@ -368,7 +368,7 @@ describe('KnowledgeService.search', () => {
       slug: 'one',
       content: 'unique-body',
     });
-    expect(service.search(PROJECT_PATH, 'absent')).toEqual([]);
+    expect(service.search(PROJECT_PATH, 'absent', undefined)).toEqual([]);
   });
 
   it('matches by content substring', () => {
@@ -386,7 +386,7 @@ describe('KnowledgeService.search', () => {
       slug: 'two',
       content: 'unrelated',
     });
-    const found = service.search(PROJECT_PATH, 'cascade');
+    const found = service.search(PROJECT_PATH, 'cascade', undefined);
     expect(found.length).toBe(1);
     expect(found[0].slug).toBe('one');
   });
@@ -400,7 +400,7 @@ describe('KnowledgeService.search', () => {
       slug: 'cascade-rule',
       content: 'body',
     });
-    const found = service.search(PROJECT_PATH, 'cascade');
+    const found = service.search(PROJECT_PATH, 'cascade', undefined);
     expect(found.length).toBe(1);
   });
 
@@ -415,7 +415,7 @@ describe('KnowledgeService.search', () => {
         content: `match-${i}`,
       });
     }
-    const found = service.search(PROJECT_PATH, 'match', 2);
+    const found = service.search(PROJECT_PATH, 'match', undefined, 2);
     expect(found.length).toBe(2);
   });
 
@@ -428,16 +428,170 @@ describe('KnowledgeService.search', () => {
       slug: 'one',
       content: 'match',
     });
-    expect(service.search(PROJECT_PATH, 'match', 9999).length).toBe(1);
+    expect(service.search(PROJECT_PATH, 'match', undefined, 9999).length).toBe(
+      1,
+    );
   });
 
   it('throws project_not_found for unknown project', () => {
     const { service } = makeHarness();
     try {
-      service.search('/missing', 'x');
+      service.search('/missing', 'x', undefined);
       fail('expected throw');
     } catch (e) {
       expect((e as KnowledgeServiceError).reason).toBe('project_not_found');
     }
+  });
+});
+
+describe('KnowledgeService kind field', () => {
+  it('create stores kind=fundamental when provided explicitly', () => {
+    const { service, seedAgent } = makeHarness();
+    seedAgent('alpha');
+    const k = service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'rule',
+      content: 'binding',
+      kind: 'fundamental',
+    });
+    expect(k.kind).toBe('fundamental');
+  });
+
+  it('create defaults kind to situational when omitted', () => {
+    const { service, seedAgent } = makeHarness();
+    seedAgent('alpha');
+    const k = service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'note',
+      content: 'context',
+    });
+    expect(k.kind).toBe('situational');
+  });
+
+  it('update patches kind alone (situational → fundamental)', () => {
+    const { service, seedAgent } = makeHarness();
+    seedAgent('alpha');
+    service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'one',
+      content: 'x',
+    });
+    const updated = service.update('one', {
+      project: PROJECT_PATH,
+      kind: 'fundamental',
+    });
+    expect(updated.kind).toBe('fundamental');
+  });
+
+  it('update with same-kind value still flips updated_at', () => {
+    const { service, seedAgent } = makeHarness();
+    seedAgent('alpha');
+    const created = service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'one',
+      content: 'x',
+    });
+    const t0 = created.updatedAt.getTime();
+    // Force later timestamp by waiting a millisecond.
+    const realNow = Date.now;
+    Date.now = () => t0 + 1000;
+    try {
+      const updated = service.update('one', {
+        project: PROJECT_PATH,
+        kind: 'situational',
+      });
+      expect(updated.updatedAt.getTime()).toBeGreaterThan(t0);
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  it('search with kind:fundamental only returns only fundamentals', () => {
+    const { service, seedAgent } = makeHarness();
+    seedAgent('alpha');
+    service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'a',
+      content: 'a',
+      kind: 'fundamental',
+    });
+    service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'b',
+      content: 'b',
+    });
+    const found = service.search(PROJECT_PATH, undefined, 'fundamental');
+    expect(found.length).toBe(1);
+    expect(found[0].slug).toBe('a');
+  });
+
+  it('search with q AND kind AND-combines', () => {
+    const { service, seedAgent } = makeHarness();
+    seedAgent('alpha');
+    service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'a',
+      content: 'cascade rule',
+      kind: 'fundamental',
+    });
+    service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'b',
+      content: 'cascade note',
+    });
+    service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'c',
+      content: 'unrelated',
+      kind: 'fundamental',
+    });
+    const found = service.search(PROJECT_PATH, 'cascade', 'fundamental');
+    expect(found.length).toBe(1);
+    expect(found[0].slug).toBe('a');
+  });
+
+  it('search with neither q nor kind throws invalid_query', () => {
+    const { service } = makeHarness();
+    try {
+      service.search(PROJECT_PATH, undefined, undefined);
+      fail('expected throw');
+    } catch (e) {
+      expect((e as KnowledgeServiceError).reason).toBe('invalid_query');
+    }
+  });
+
+  it('findManyWithPagination with filters.kind:fundamental returns only fundamentals', () => {
+    const { service, seedAgent } = makeHarness();
+    seedAgent('alpha');
+    service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'a',
+      content: 'x',
+      kind: 'fundamental',
+    });
+    service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'b',
+      content: 'y',
+    });
+    const rows = service.findManyWithPagination({
+      project: PROJECT_PATH,
+      page: 1,
+      limit: 10,
+      filters: { kind: 'fundamental' },
+    });
+    expect(rows.length).toBe(1);
+    expect(rows[0].slug).toBe('a');
   });
 });

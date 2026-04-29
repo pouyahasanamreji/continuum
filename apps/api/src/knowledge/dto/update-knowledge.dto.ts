@@ -11,6 +11,7 @@ export const updateKnowledgeDto = z.object({
   slug: z.string(),
   agentSlug: z.string().regex(SLUG_RE).optional(),
   content: z.string().optional(),
+  kind: z.enum(['fundamental', 'situational']).optional(),
 });
 export type UpdateKnowledgeInput = z.infer<typeof updateKnowledgeDto>;
 

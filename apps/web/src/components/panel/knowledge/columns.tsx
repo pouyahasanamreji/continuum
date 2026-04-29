@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowUpDown, PencilIcon, TrashIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { KnowledgeFull } from "@/types/knowledge";
 
@@ -75,6 +76,26 @@ export function makeColumns(
         if (!value) return true;
         const slug = actions.agentSlugById(row.original.agentId) ?? "";
         return slug.toLowerCase().includes(value.toLowerCase());
+      },
+    },
+    {
+      accessorKey: "kind",
+      id: "kind",
+      header: sortHeader("Kind"),
+      cell: ({ row }) => (
+        <Badge
+          variant={
+            row.original.kind === "fundamental" ? "default" : "secondary"
+          }
+        >
+          {row.original.kind}
+        </Badge>
+      ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: (row, _id, value: string) => {
+        if (!value || value === "all") return true;
+        return row.original.kind === value;
       },
     },
     {

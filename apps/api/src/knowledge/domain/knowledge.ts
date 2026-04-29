@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { KnowledgeKindEnum } from '../../knowledge-kinds/knowledge-kinds.enum';
 
 export class Knowledge {
   @ApiProperty({ type: Number, example: 1 })
@@ -15,6 +16,9 @@ export class Knowledge {
 
   @ApiProperty({ type: String })
   content!: string;
+
+  @ApiProperty({ enum: KnowledgeKindEnum, example: 'situational' })
+  kind!: KnowledgeKindEnum;
 
   @ApiProperty({ type: Date })
   createdAt!: Date;

@@ -65,6 +65,7 @@ function MetadataList({
         <span className="text-muted-foreground">#{knowledge.agentId}</span>
       ),
     },
+    { label: "Kind", value: <span className="font-mono">{knowledge.kind}</span> },
     { label: "Created", value: fmt(knowledge.createdAt) },
     { label: "Updated", value: fmt(knowledge.updatedAt) },
   ];

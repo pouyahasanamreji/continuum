@@ -27,8 +27,9 @@ path — or the service throws \`project_not_found\`.
 This document is project-agnostic. Project-specific facts (base
 branch name, worktree-naming convention, shared-file names,
 reference modules) live as knowledge lessons. Enumerate via
-\`knowledge_list({project})\` and pull relevant ones via
-\`knowledge_search({project, q})\`.
+\`knowledge_list({project})\`, load every binding rule via
+\`knowledge_search({project, kind: 'fundamental'})\`, and pull
+topical situational lessons via \`knowledge_search({project, q})\`.
 
 ## Workflow
 
@@ -44,10 +45,13 @@ Every human-given task runs through four phases.
   \`agent_get({project, slug})\`.
 - Call \`knowledge_list({project})\` to enumerate accumulated lessons
   (slug, agentId, content, timestamps).
-- Call \`knowledge_search({project, q})\` for each topical keyword
-  drawn from the human task (modules, files, error names, concepts).
-  Surface every matching lesson before research; lessons are how
-  prior dispatches teach this one.
+- Call \`knowledge_search({project, kind: 'fundamental'})\` to load
+  every fundamental lesson for this project. These are binding
+  rules that apply to every dispatch — read in full before any
+  other phase-1 work.
+- Call \`knowledge_search({project, q})\` with topical keywords drawn
+  from the human task. Each hit is a situational lesson likely
+  relevant to the new work. Read every hit before Phase 2.
 - If no agents are active, say so explicitly.
 - Ask clarifying questions **only** when a conflict cannot be
   resolved without human input. Otherwise proceed.
@@ -179,10 +183,10 @@ service. There are no \`.orchestrator/\` files to read or write.
 | Create new dispatch record | \`agent_create({project, slug, branch, worktree, reservedPaths, request, plan, implPrompt, coordinationBrief})\` |
 | Update agent (status, paths, notes) | \`agent_update({project, slug, ...})\` |
 | List knowledge lessons | \`knowledge_list({project})\` |
-| Search knowledge by keyword | \`knowledge_search({project, q, limit?})\` |
+| Search lessons | \`knowledge_search({project, q?, kind?, limit?})\` |
 | Read one lesson | \`knowledge_get({project, slug})\` |
-| Record a new lesson | \`knowledge_create({project, agentSlug, slug, content})\` |
-| Replace a lesson body | \`knowledge_update({project, slug, content?, agentSlug?})\` |
+| Record a new lesson | \`knowledge_create({project, agentSlug, slug, content, kind?})\` |
+| Edit a lesson | \`knowledge_update({project, slug, content?, agentSlug?, kind?})\` |
 | Retire a lesson | \`knowledge_delete({project, slug})\` |
 
 \`plot_update\` applies unified-diff patches with **zero fuzz**.
@@ -217,11 +221,12 @@ Before planning any new dispatch, the orchestrator calls:
 2. \`agent_get({project, slug})\` — drill into specific agents
    when collision details matter.
 3. \`knowledge_list({project})\` — to enumerate every recorded
-   lesson (slug + agentId + timestamps).
-4. \`knowledge_search({project, q})\` — for each topical keyword
-   from the human task. Surface every matching lesson before
-   planning research; lessons are how prior dispatches teach this
-   one.
+   lesson (slug + agentSlug + kind + timestamps).
+4. \`knowledge_search({project, kind: 'fundamental'})\` — load every
+   fundamental lesson. Binding rules; read in full.
+5. \`knowledge_search({project, q})\` for each topical keyword from
+   the human task. Surface every matching situational lesson
+   before planning research.
 
 No dispatch without a fresh reading.
 
@@ -261,7 +266,9 @@ When the human confirms an agent is merged, the orchestrator:
    - \`postMergeNotes\` describes any drift between planned
      and actual files.
 3. Records any reusable lesson via
-   \`knowledge_create({project, agentSlug:<this-agent-slug>, slug:<descriptive-kebab-slug>, content:<lesson-body>})\`.
+   \`knowledge_create({project, agentSlug:<this-agent-slug>, slug:<descriptive-kebab-slug>, content:<lesson-body>, kind:'situational'|'fundamental'})\`.
+   Default to \`'situational'\`. Use \`'fundamental'\` only when the
+   lesson must apply to every future dispatch.
    Each lesson is one row; structure prose under any internal
    headings you want, but the row is the unit of addressability.
 

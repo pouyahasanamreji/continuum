@@ -1,17 +1,20 @@
 // Synchronous because better-sqlite3 is synchronous.
 import { IPaginationOptions } from '../../../utils/types/pagination-options';
+import { KnowledgeKindEnum } from '../../../knowledge-kinds/knowledge-kinds.enum';
 import { Knowledge } from '../../domain/knowledge';
 
 export interface KnowledgeCreatePayload {
   agentId: number;
   slug: string;
   content: string;
+  kind: KnowledgeKindEnum;
   now: number;
 }
 
 export interface KnowledgeUpdatePatch {
   agentId?: number;
   content?: string;
+  kind?: KnowledgeKindEnum;
   updatedAt: number;
 }
 
@@ -22,6 +25,7 @@ export type KnowledgeCreateResult =
 export interface KnowledgeFilterOptions {
   agentId?: number | null;
   slug?: string | null;
+  kind?: KnowledgeKindEnum | null;
 }
 
 export interface KnowledgeSortOption {
@@ -54,7 +58,8 @@ export abstract class KnowledgeRepository {
   abstract remove(id: number): void;
   abstract searchByContent(
     projectId: number,
-    query: string,
+    query: string | undefined,
+    kind: KnowledgeKindEnum | undefined,
     limit: number,
   ): Knowledge[];
 }

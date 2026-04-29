@@ -18,6 +18,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -48,6 +55,8 @@ export function DataTable<TData, TValue>({
     (table.getColumn("slug")?.getFilterValue() as string) ?? "";
   const agentFilter =
     (table.getColumn("agentSlug")?.getFilterValue() as string) ?? "";
+  const kindFilter =
+    (table.getColumn("kind")?.getFilterValue() as string) ?? "all";
 
   return (
     <div className="space-y-3">
@@ -68,6 +77,21 @@ export function DataTable<TData, TValue>({
           }
           className="max-w-xs"
         />
+        <Select
+          value={kindFilter}
+          onValueChange={(v) =>
+            table.getColumn("kind")?.setFilterValue(v === "all" ? "" : v)
+          }
+        >
+          <SelectTrigger className="max-w-xs">
+            <SelectValue placeholder="Kind" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All kinds</SelectItem>
+            <SelectItem value="fundamental">fundamental</SelectItem>
+            <SelectItem value="situational">situational</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="rounded-md border">

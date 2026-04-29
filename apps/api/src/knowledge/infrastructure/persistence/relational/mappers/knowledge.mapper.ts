@@ -1,4 +1,5 @@
 import { Knowledge } from '../../../../domain/knowledge';
+import { KnowledgeKindEnum } from '../../../../../knowledge-kinds/knowledge-kinds.enum';
 import { KnowledgeEntity } from '../entities/knowledge.entity';
 
 export class KnowledgeMapper {
@@ -9,6 +10,7 @@ export class KnowledgeMapper {
     k.agentId = raw.agent_id;
     k.slug = raw.slug;
     k.content = raw.content;
+    k.kind = raw.kind as KnowledgeKindEnum;
     k.createdAt = new Date(raw.created_at);
     k.updatedAt = new Date(raw.updated_at);
     k.deletedAt = raw.deleted_at !== null ? new Date(raw.deleted_at) : null;
