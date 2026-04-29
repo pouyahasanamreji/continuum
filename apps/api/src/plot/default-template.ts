@@ -1,6 +1,5 @@
-// Canonical orchestrator-protocol template seeded into every new
-// project's plots row (project_create) and as the default plot
-// content when project_migrate creates a fresh project record.
+// Canonical orchestrator-protocol template seeded into every
+// new project's plots row (project_create).
 // This template is INTENTIONALLY divergent from the outer
 // <orchestrator-root>/PLOT.md: the outer file describes the
 // human-facing orchestrator workflow; this inner template describes
@@ -20,8 +19,8 @@ agent registry — is persisted by the continuum MCP
 service. Drive the workflow by calling MCP tools, NOT by editing
 files under \`.orchestrator/\`. Every project-scoped tool takes
 \`project\` as its first argument: the canonical absolute path
-of the project root as registered with \`project_create\` /
-\`project_migrate\`. If you run inside a git worktree of the
+of the project root as registered with \`project_create\`. If
+you run inside a git worktree of the
 project, still pass the canonical project path — not the worktree
 path — or the service throws \`project_not_found\`.
 

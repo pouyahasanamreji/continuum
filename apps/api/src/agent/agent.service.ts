@@ -3,7 +3,6 @@ import { Agent } from './domain/agent';
 import { AgentServiceError } from '../common/errors/service-errors';
 import { SLUG_RE } from '../common/slug';
 import {
-  AgentMigrationPayload,
   AgentRepository,
   AgentUpdatePatch,
 } from './infrastructure/persistence/agent.repository';
@@ -169,14 +168,5 @@ export class AgentService {
     const updated = this.repo.findById(existing.id);
     if (!updated) throw new AgentServiceError('not_found', slug);
     return updated;
-  }
-
-  upsertFromMigration(
-    projectPath: string,
-    slug: string,
-    payload: AgentMigrationPayload,
-  ): void {
-    const projectId = this.resolveProjectIdOrThrow(projectPath);
-    this.repo.upsertFromMigration(projectId, slug, payload);
   }
 }
