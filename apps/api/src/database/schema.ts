@@ -3,7 +3,7 @@
 // synthesise.
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION: number = 7;
+export const SCHEMA_VERSION: number = 8;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS knowledge (
   agent_id   INTEGER NOT NULL REFERENCES agents(id)   ON DELETE CASCADE,
   slug       TEXT NOT NULL,
   content    TEXT NOT NULL,
+  kind       TEXT NOT NULL DEFAULT 'situational'
+             CHECK (kind IN ('fundamental','situational')),
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   deleted_at INTEGER NULL,
@@ -123,6 +125,25 @@ export function migrate(db: Database.Database): void {
           UPDATE plots SET created_at = updated_at WHERE created_at = 0;
           ALTER TABLE plots ADD COLUMN deleted_at INTEGER NULL;
         `);
+        db.exec(SCHEMA_SQL);
+        db.pragma(`user_version = ${SCHEMA_VERSION}`);
+      });
+      tx.immediate();
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+    return;
+  }
+
+  if (current === 7 && SCHEMA_VERSION === 8) {
+    db.pragma('foreign_keys = OFF');
+    try {
+      const tx = db.transaction(() => {
+        db.exec(
+          `ALTER TABLE knowledge ADD COLUMN kind TEXT NOT NULL ` +
+            `DEFAULT 'situational' ` +
+            `CHECK (kind IN ('fundamental','situational'));`,
+        );
         db.exec(SCHEMA_SQL);
         db.pragma(`user_version = ${SCHEMA_VERSION}`);
       });

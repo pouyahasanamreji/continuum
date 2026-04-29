@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Knowledge } from './domain/knowledge';
 import { KnowledgeServiceError } from '../common/errors/service-errors';
 import { SLUG_RE } from '../common/slug';
+import { KnowledgeKindEnum } from '../knowledge-kinds/knowledge-kinds.enum';
 import {
   KnowledgeRepository,
   KnowledgeUpdatePatch,
@@ -57,7 +58,11 @@ export class KnowledgeService {
       agentId = agent.id;
     }
     return this.repo.findManyWithPagination(projectId, {
-      filterOptions: { agentId, slug: filters?.slug ?? null },
+      filterOptions: {
+        agentId,
+        slug: filters?.slug ?? null,
+        kind: filters?.kind ?? null,
+      },
       sortOptions: query.sort ?? null,
       paginationOptions: { page: query.page ?? 1, limit: query.limit ?? 10 },
     });
@@ -81,6 +86,7 @@ export class KnowledgeService {
       agentId,
       slug: dto.slug,
       content: dto.content,
+      kind: dto.kind ?? 'situational',
       now: Date.now(),
     });
     if (!result.ok) {
@@ -110,6 +116,10 @@ export class KnowledgeService {
       patch.content = dto.content;
       touched = true;
     }
+    if (dto.kind !== undefined) {
+      patch.kind = dto.kind;
+      touched = true;
+    }
 
     if (!touched) throw new KnowledgeServiceError('no_change', slug);
 
@@ -126,12 +136,20 @@ export class KnowledgeService {
     this.repo.remove(existing.id);
   }
 
-  search(projectPath: string, query: string, limit?: number): Knowledge[] {
+  search(
+    projectPath: string,
+    query: string | undefined,
+    kind: KnowledgeKindEnum | undefined,
+    limit?: number,
+  ): Knowledge[] {
+    if (query === undefined && kind === undefined) {
+      throw new KnowledgeServiceError('invalid_query', 'q or kind required');
+    }
     const projectId = this.resolveProjectIdOrThrow(projectPath);
     const effectiveLimit = Math.min(
       limit ?? SEARCH_DEFAULT_LIMIT,
       SEARCH_MAX_LIMIT,
     );
-    return this.repo.searchByContent(projectId, query, effectiveLimit);
+    return this.repo.searchByContent(projectId, query, kind, effectiveLimit);
   }
 }

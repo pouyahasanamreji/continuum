@@ -69,6 +69,9 @@ export function mapServiceError(err: unknown): never {
       case 'invalid_slug':
         unprocessable('slug', 'invalidSlug');
         break;
+      case 'invalid_query':
+        unprocessable('query', 'queryRequired');
+        break;
       case 'no_change':
         unprocessable('knowledge', 'noChange');
         break;

@@ -40,6 +40,7 @@ export class KnowledgeServiceError extends Error {
       | 'agent_not_found'
       | 'slug_conflict'
       | 'invalid_slug'
+      | 'invalid_query'
       | 'not_found'
       | 'no_change',
     public readonly detail?: string,

@@ -44,6 +44,9 @@ export function KnowledgeFormDialog({
   const [slug, setSlug] = useState("");
   const [agentSlug, setAgentSlug] = useState("");
   const [content, setContent] = useState("");
+  const [kind, setKind] = useState<"fundamental" | "situational">(
+    "situational",
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,10 +57,12 @@ export function KnowledgeFormDialog({
       const a = agents.find((x) => x.id === initial.agentId);
       setAgentSlug(a?.slug ?? "");
       setContent(initial.content);
+      setKind(initial.kind ?? "situational");
     } else {
       setSlug("");
       setAgentSlug(agents[0]?.slug ?? "");
       setContent("");
+      setKind("situational");
     }
     setError(null);
     setBusy(false);
@@ -71,15 +76,20 @@ export function KnowledgeFormDialog({
       if (mode === "create") {
         const created = await postJson<KnowledgeFull>(
           "/api/orchestrator/knowledge",
-          { project, agentSlug, slug, content },
+          { project, agentSlug, slug, content, kind },
         );
         onSaved(created);
       } else {
         if (!initial) throw new Error("missing initial row");
-        const body: { project: string; agentSlug?: string; content?: string } =
-          { project };
+        const body: {
+          project: string;
+          agentSlug?: string;
+          content?: string;
+          kind?: "fundamental" | "situational";
+        } = { project };
         if (agentSlug && agentSlug !== "") body.agentSlug = agentSlug;
         if (content !== initial.content) body.content = content;
+        if (kind !== initial.kind) body.kind = kind;
         const updated = await patchJson<KnowledgeFull>(
           `/api/orchestrator/knowledge/${encodeURIComponent(initial.slug)}`,
           body,
@@ -129,6 +139,23 @@ export function KnowledgeFormDialog({
                     {a.slug}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Kind</label>
+            <Select
+              value={kind}
+              onValueChange={(v) =>
+                setKind(v as "fundamental" | "situational")
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="situational">situational</SelectItem>
+                <SelectItem value="fundamental">fundamental</SelectItem>
               </SelectContent>
             </Select>
           </div>

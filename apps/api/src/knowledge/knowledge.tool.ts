@@ -90,7 +90,7 @@ export class KnowledgeTool {
   @Tool({
     name: 'knowledge_create',
     description:
-      'Create a new knowledge lesson under `project` attributed to `agentSlug`. `slug` matches /^[a-z][a-z0-9-]*$/ and is unique within the project. `content` is the full lesson body (markdown OK). Use this tool when recording a reusable lesson at post-merge file-back.',
+      'Create a new knowledge lesson under `project` attributed to `agentSlug`. `slug` matches /^[a-z][a-z0-9-]*$/ and is unique within the project. `content` is the full lesson body (markdown OK). Use this tool when recording a reusable lesson at post-merge file-back. Optional `kind` is `"fundamental"` (binding rule applied to every dispatch) or `"situational"` (context-specific). Defaults to `"situational"`.',
     parameters: createKnowledgeDto,
   })
   knowledgeCreate(args: CreateKnowledgeInput) {
@@ -104,7 +104,7 @@ export class KnowledgeTool {
   @Tool({
     name: 'knowledge_update',
     description:
-      'Whole-content replace of a knowledge lesson by `project` + `slug`. Pass new `content` (full body) and/or new `agentSlug`. Slug rename is not supported — delete+create instead. Empty patch throws `no_change`.',
+      'Whole-content replace of a knowledge lesson by `project` + `slug`. Pass new `content` (full body) and/or new `agentSlug`. Slug rename is not supported — delete+create instead. Empty patch throws `no_change`. Optional `kind` patches the lesson kind ("fundamental" or "situational").',
     parameters: updateKnowledgeDto,
   })
   knowledgeUpdate(args: UpdateKnowledgeInput) {
@@ -133,13 +133,13 @@ export class KnowledgeTool {
   @Tool({
     name: 'knowledge_search',
     description:
-      'Substring search across knowledge lessons in `project`. `q` matches `content` OR `slug` (case-insensitive ASCII). Optional `limit` (default 10, max 50). Use this tool at Phase-1 Intake to surface lessons relevant to the human task before research.',
+      'Substring search across knowledge lessons in `project`. At least one of `q` or `kind` is required. `q` matches `content` OR `slug` (case-insensitive ASCII). `kind: "fundamental"` filters to binding lessons that must be followed on every dispatch; `kind: "situational"` filters to context-specific lessons. Optional `limit` (default 10, max 50). Use this tool at Phase-1 Intake — first with `kind: "fundamental"` to load every binding rule, then with `q` for topical relevance.',
     parameters: searchKnowledgeDto,
   })
   knowledgeSearch(args: SearchKnowledgeDto) {
     try {
       return toolSuccess(
-        this.knowledge.search(args.project, args.q, args.limit),
+        this.knowledge.search(args.project, args.q, args.kind, args.limit),
       );
     } catch (e) {
       return toolError(e);

@@ -25,6 +25,7 @@ import { Knowledge } from './domain/knowledge';
 import { CreateKnowledgeDto } from './dto/create-knowledge.dto';
 import { UpdateKnowledgeDto } from './dto/update-knowledge.dto';
 import { QueryKnowledgeDto } from './dto/query-knowledge.dto';
+import { KnowledgeKindEnum } from '../knowledge-kinds/knowledge-kinds.enum';
 import {
   InfinityPaginationResponse,
   InfinityPaginationResponseDto,
@@ -66,24 +67,36 @@ export class KnowledgeController {
   @Get('knowledge/search')
   @HttpCode(HttpStatus.OK)
   @ApiQuery({ name: 'project', type: String, required: true })
-  @ApiQuery({ name: 'q', type: String, required: true })
+  @ApiQuery({ name: 'q', type: String, required: false })
+  @ApiQuery({ name: 'kind', enum: KnowledgeKindEnum, required: false })
   @ApiQuery({ name: 'limit', type: Number, required: false })
   @ApiOkResponse({ type: Knowledge, isArray: true })
   searchKnowledge(
     @Query('project') project?: string,
     @Query('q') q?: string,
+    @Query('kind') kind?: string,
     @Query('limit') limit?: string,
   ): Knowledge[] {
     if (!project) missingProject();
-    if (!q) {
+    if (!q && !kind) {
       throw new UnprocessableEntityException({
         status: 422,
-        errors: { q: 'missingQuery' },
+        errors: { query: 'queryRequired' },
+      });
+    }
+    if (
+      kind !== undefined &&
+      kind !== 'fundamental' &&
+      kind !== 'situational'
+    ) {
+      throw new UnprocessableEntityException({
+        status: 422,
+        errors: { kind: 'invalidKind' },
       });
     }
     const parsed = limit !== undefined ? Number(limit) : undefined;
     try {
-      return this.knowledge.search(project, q, parsed);
+      return this.knowledge.search(project, q, kind, parsed);
     } catch (e) {
       mapServiceError(e);
     }

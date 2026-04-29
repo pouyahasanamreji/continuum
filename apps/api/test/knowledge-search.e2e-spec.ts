@@ -72,6 +72,13 @@ describe('knowledge_search MCP tool (e2e)', () => {
       slug: 'unrelated-thing',
       content: 'A note about caching.',
     });
+    await callTool('knowledge_create', {
+      project: projectPath,
+      agentSlug: 'alpha',
+      slug: 'binding-rule',
+      content: 'Always do X before Y.',
+      kind: 'fundamental',
+    });
   });
 
   afterAll(async () => {
@@ -97,5 +104,25 @@ describe('knowledge_search MCP tool (e2e)', () => {
     expect(env.isError).toBeFalsy();
     const parsed = JSON.parse(env.content[0].text) as unknown[];
     expect(parsed).toEqual([]);
+  });
+
+  it('kind: fundamental filters to fundamental rows only', async () => {
+    const env = await callTool('knowledge_search', {
+      project: projectPath,
+      kind: 'fundamental',
+    });
+    expect(env.isError).toBeFalsy();
+    const parsed = JSON.parse(env.content[0].text) as Array<{
+      slug: string;
+      kind: string;
+    }>;
+    expect(parsed.length).toBe(1);
+    expect(parsed[0].slug).toBe('binding-rule');
+    expect(parsed[0].kind).toBe('fundamental');
+  });
+
+  it('returns isError when neither q nor kind provided', async () => {
+    const env = await callTool('knowledge_search', { project: projectPath });
+    expect(env.isError).toBe(true);
   });
 });

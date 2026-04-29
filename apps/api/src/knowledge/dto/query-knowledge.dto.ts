@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type, plainToInstance } from 'class-transformer';
 import {
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
@@ -8,15 +9,22 @@ import {
 } from 'class-validator';
 import { z } from 'zod';
 import { Knowledge } from '../domain/knowledge';
+import { KnowledgeKindEnum } from '../../knowledge-kinds/knowledge-kinds.enum';
 
 export const listKnowledgeDto = z.object({ project: z.string() });
 export type ListKnowledgeDto = z.infer<typeof listKnowledgeDto>;
 
-export const searchKnowledgeDto = z.object({
-  project: z.string(),
-  q: z.string().min(1),
-  limit: z.number().int().min(1).max(50).optional(),
-});
+export const searchKnowledgeDto = z
+  .object({
+    project: z.string(),
+    q: z.string().min(1).optional(),
+    kind: z.enum(['fundamental', 'situational']).optional(),
+    limit: z.number().int().min(1).max(50).optional(),
+  })
+  .refine((v) => v.q !== undefined || v.kind !== undefined, {
+    message: 'q or kind required',
+    path: ['q'],
+  });
 export type SearchKnowledgeDto = z.infer<typeof searchKnowledgeDto>;
 
 export class FilterKnowledgeDto {
@@ -29,6 +37,11 @@ export class FilterKnowledgeDto {
   @IsOptional()
   @IsString()
   slug?: string | null;
+
+  @ApiPropertyOptional({ enum: KnowledgeKindEnum })
+  @IsOptional()
+  @IsEnum(KnowledgeKindEnum)
+  kind?: KnowledgeKindEnum | null;
 }
 
 export class SortKnowledgeDto {

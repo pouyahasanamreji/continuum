@@ -2,6 +2,7 @@
 // status as project module per `project-module-cleanup` lesson #7.
 import { Injectable } from '@nestjs/common';
 import { OrchestratorDbService } from '../../../../../database/orchestrator-db.service';
+import { KnowledgeKindEnum } from '../../../../../knowledge-kinds/knowledge-kinds.enum';
 import { Knowledge } from '../../../../domain/knowledge';
 import {
   KnowledgeCreatePayload,
@@ -17,6 +18,7 @@ const ORDER_COLUMNS = {
   id: 'id',
   slug: 'slug',
   agentId: 'agent_id',
+  kind: 'kind',
   createdAt: 'created_at',
   updatedAt: 'updated_at',
 } as const;
@@ -51,6 +53,10 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
     if (f?.slug !== undefined && f?.slug !== null && f.slug !== '') {
       where.push('slug LIKE ?');
       params.push(`%${f.slug}%`);
+    }
+    if (f?.kind !== undefined && f?.kind !== null) {
+      where.push('kind = ?');
+      params.push(f.kind);
     }
 
     const orderClauses: string[] = [];
@@ -106,14 +112,15 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
       const info = this.dbs.db
         .prepare(
           `INSERT INTO knowledge (
-             project_id, agent_id, slug, content, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?)`,
+             project_id, agent_id, slug, content, kind, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           projectId,
           payload.agentId,
           payload.slug,
           payload.content,
+          payload.kind,
           payload.now,
           payload.now,
         );
@@ -146,6 +153,10 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
       sets.push('content = ?');
       params.push(patch.content);
     }
+    if (patch.kind !== undefined) {
+      sets.push('kind = ?');
+      params.push(patch.kind);
+    }
 
     params.push(id);
     this.dbs.db
@@ -163,19 +174,28 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
   // wildcards — caller-managed footgun. No FTS5.
   searchByContent(
     projectId: number,
-    query: string,
+    query: string | undefined,
+    kind: KnowledgeKindEnum | undefined,
     limit: number,
   ): Knowledge[] {
-    const pattern = `%${query}%`;
+    const where: string[] = ['project_id = ?', 'deleted_at IS NULL'];
+    const params: (string | number)[] = [projectId];
+    if (query !== undefined) {
+      const pattern = `%${query}%`;
+      where.push('(content LIKE ? OR slug LIKE ?)');
+      params.push(pattern, pattern);
+    }
+    if (kind !== undefined) {
+      where.push('kind = ?');
+      params.push(kind);
+    }
+    const sql =
+      `SELECT * FROM knowledge WHERE ${where.join(' AND ')} ` +
+      `ORDER BY created_at DESC, id ASC LIMIT ?`;
+    params.push(limit);
     const rows = this.dbs.db
-      .prepare<[number, string, string, number], KnowledgeEntity>(
-        `SELECT * FROM knowledge
-         WHERE project_id = ? AND deleted_at IS NULL
-           AND (content LIKE ? OR slug LIKE ?)
-         ORDER BY created_at DESC, id ASC
-         LIMIT ?`,
-      )
-      .all(projectId, pattern, pattern, limit);
+      .prepare<(string | number)[], KnowledgeEntity>(sql)
+      .all(...params);
     return rows.map((r) => KnowledgeMapper.toDomain(r));
   }
 }
