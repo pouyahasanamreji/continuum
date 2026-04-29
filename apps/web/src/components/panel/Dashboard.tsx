@@ -140,7 +140,7 @@ export function Dashboard() {
           <Card className="h-full transition-colors hover:bg-accent">
             <CardHeader>
               <CardTitle>Knowledge</CardTitle>
-              <CardDescription>Project knowledge document</CardDescription>
+              <CardDescription>Lessons learned across dispatches</CardDescription>
             </CardHeader>
           </Card>
         </a>

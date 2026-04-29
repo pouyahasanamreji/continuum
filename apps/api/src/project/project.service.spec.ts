@@ -108,7 +108,7 @@ describe('ProjectService.canonicalize', () => {
 });
 
 describe('ProjectService.create', () => {
-  it('inserts project + plot (default template) + empty knowledge', () => {
+  it('inserts project + plot (default template) + zero knowledge rows', () => {
     const { service, db, idOf } = makeService();
     const created = service.create({ path: '/Users/foo/proj' });
     expect(created.path).toBe('/Users/foo/proj');
@@ -120,10 +120,12 @@ describe('ProjectService.create', () => {
       .get(id) as { content: string };
     expect(plotRow.content).toBe('# default plot template');
 
-    const kRow = db
-      .prepare('SELECT content FROM knowledge WHERE project_id = ?')
-      .get(id) as { content: string };
-    expect(kRow.content).toBe('');
+    const kCount = (
+      db
+        .prepare('SELECT COUNT(*) AS c FROM knowledge WHERE project_id = ?')
+        .get(id) as { c: number }
+    ).c;
+    expect(kCount).toBe(0);
   });
 
   it('throws project_exists on duplicate', () => {
@@ -153,7 +155,7 @@ describe('ProjectService.create', () => {
 });
 
 describe('ProjectService.remove', () => {
-  it('cascades plot/plot_history/knowledge/knowledge_history/agents', () => {
+  it('cascades plot/plot_history/knowledge/agents', () => {
     const { service, db, agents, idOf } = makeService();
     const path = '/Users/foo/proj';
     service.create({ path });
@@ -163,16 +165,15 @@ describe('ProjectService.remove', () => {
     db.prepare(
       'INSERT INTO plot_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
     ).run(id, 'old', 'diff', now);
-    db.prepare(
-      'INSERT INTO knowledge_history (project_id, content, applied_diff, created_at) VALUES (?, ?, ?, ?)',
-    ).run(id, 'old', 'diff', now);
-    db.prepare(
-      `INSERT INTO agents (
+    const a1 = db
+      .prepare(
+        `INSERT INTO agents (
         project_id, slug, status, branch, worktree, reserved_paths_json,
         request, plan, impl_prompt, coordination_brief, post_merge_notes,
         created_at, updated_at
       ) VALUES (?, ?, 'draft', ?, ?, '[]', ?, ?, ?, ?, '', ?, ?)`,
-    ).run(id, 'a1', 'feat/a1', '/tmp/wt', '', '', '', '', now, now);
+      )
+      .run(id, 'a1', 'feat/a1', '/tmp/wt', '', '', '', '', now, now);
     db.prepare(
       `INSERT INTO agents (
         project_id, slug, status, branch, worktree, reserved_paths_json,
@@ -180,6 +181,10 @@ describe('ProjectService.remove', () => {
         created_at, updated_at
       ) VALUES (?, ?, 'draft', ?, ?, '[]', ?, ?, ?, ?, '', ?, ?)`,
     ).run(id, 'a2', 'feat/a2', '/tmp/wt', '', '', '', '', now, now);
+    db.prepare(
+      `INSERT INTO knowledge (project_id, agent_id, slug, content, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(id, Number(a1.lastInsertRowid), 'lesson-one', 'body', now, now);
 
     expect(agents()).toBe(2);
 
@@ -207,15 +212,6 @@ describe('ProjectService.remove', () => {
       (
         db
           .prepare('SELECT COUNT(*) AS c FROM knowledge WHERE project_id = ?')
-          .get(id) as { c: number }
-      ).c,
-    ).toBe(0);
-    expect(
-      (
-        db
-          .prepare(
-            'SELECT COUNT(*) AS c FROM knowledge_history WHERE project_id = ?',
-          )
           .get(id) as { c: number }
       ).c,
     ).toBe(0);

@@ -4,8 +4,9 @@
 // This template is INTENTIONALLY divergent from the outer
 // <orchestrator-root>/PLOT.md: the outer file describes the
 // human-facing orchestrator workflow; this inner template describes
-// orchestration via MCP tool calls (plot, plot_update, knowledge_*,
-// registry_list, agent_*). No auto-sync.
+// orchestration via MCP tool calls (plot, plot_update, knowledge_list,
+// knowledge_search, knowledge_get, knowledge_create, knowledge_update,
+// knowledge_delete, registry_list, agent_*). No auto-sync.
 
 export const DEFAULT_PLOT_TEMPLATE: string = `# Orchestrator Protocol
 
@@ -26,8 +27,9 @@ path — or the service throws \`project_not_found\`.
 
 This document is project-agnostic. Project-specific facts (base
 branch name, worktree-naming convention, shared-file names,
-reference modules) live in the project knowledge document. Read
-via \`knowledge_get({project})\`.
+reference modules) live as knowledge lessons. Enumerate via
+\`knowledge_list({project})\` and pull relevant ones via
+\`knowledge_search({project, q})\`.
 
 ## Workflow
 
@@ -41,10 +43,12 @@ Every human-given task runs through four phases.
   \`abandoned\`). For collision purposes, filter to
   \`status === 'active'\`. Drill into any specific agent with
   \`agent_get({project, slug})\`.
-- Call \`knowledge_get({project})\` to load project facts and
-  accumulated learnings. Optional \`section\` arg matches a
-  top-level \`## <Heading>\` exactly (case-sensitive); sub-headings
-  are not addressable.
+- Call \`knowledge_list({project})\` to enumerate accumulated lessons
+  (slug, agentId, content, timestamps).
+- Call \`knowledge_search({project, q})\` for each topical keyword
+  drawn from the human task (modules, files, error names, concepts).
+  Surface every matching lesson before research; lessons are how
+  prior dispatches teach this one.
 - If no agents are active, say so explicitly.
 - Ask clarifying questions **only** when a conflict cannot be
   resolved without human input. Otherwise proceed.
@@ -55,8 +59,9 @@ Every human-given task runs through four phases.
   \`subagent_type: "Explore"\` or \`"Plan"\`).
 - The research agent produces a detailed, best-practice
   implementation plan. It must:
-  - Read the project conventions surfaced by \`knowledge_get\`
-    and any reference files / modules they point at.
+  - Read the project conventions surfaced by \`knowledge_list\` /
+    \`knowledge_search\` and any reference files / modules they
+    point at.
   - Enumerate every file to **create**, **modify**, or **delete**.
   - Identify shared files (append-only registries, generated
     artifacts, shared hook/util files, etc.).
@@ -135,7 +140,7 @@ dispatches.
 
 - **Worktrees** live as siblings of the primary checkout. Naming
   follows the project's worktree convention (recorded in knowledge —
-  read via \`knowledge_get\`).
+  read via \`knowledge_list\`).
 - **Branch names** follow task intent — descriptive prefixes
   such as \`feature/refactor-<module>\`,
   \`feature/add-<feature>\`.
@@ -174,14 +179,17 @@ service. There are no \`.orchestrator/\` files to read or write.
 | Inspect one agent | \`agent_get({project, slug})\` |
 | Create new dispatch record | \`agent_create({project, slug, branch, worktree, reservedPaths, request, plan, implPrompt, coordinationBrief})\` |
 | Update agent (status, paths, notes) | \`agent_update({project, slug, ...})\` |
-| Read project knowledge | \`knowledge_get({project, section?})\` |
-| Append a knowledge lesson | \`knowledge_update({project, diff})\` |
+| List knowledge lessons | \`knowledge_list({project})\` |
+| Search knowledge by keyword | \`knowledge_search({project, q, limit?})\` |
+| Read one lesson | \`knowledge_get({project, slug})\` |
+| Record a new lesson | \`knowledge_create({project, agentSlug, slug, content})\` |
+| Replace a lesson body | \`knowledge_update({project, slug, content?, agentSlug?})\` |
+| Retire a lesson | \`knowledge_delete({project, slug})\` |
 
-\`plot_update\` and \`knowledge_update\` apply unified-diff
-patches with **zero fuzz**. Diff headers are validated by exact
-regex — both header lines must appear on their own line,
-case-sensitive, with at least one whitespace between marker and
-path:
+\`plot_update\` applies unified-diff patches with **zero fuzz**.
+Diff headers are validated by exact regex — both header lines
+must appear on their own line, case-sensitive, with at least one
+whitespace between marker and path:
 
 \`\`\`
 --- a/PLOT.md
@@ -192,24 +200,29 @@ path:
 +added line
 \`\`\`
 
-For knowledge use \`--- a/knowledge.md\` /
-\`+++ b/knowledge.md\` (lower-case \`knowledge\`). Hunk-context
-lines must match current content exactly. On any mismatch the
-service throws \`hunk_mismatch\` (with the failed
+Hunk-context lines must match current content exactly. On any
+mismatch the service throws \`hunk_mismatch\` (with the failed
 \`@@\` header in the detail) or \`invalid_diff_headers\`.
-Recovery: re-read with \`plot\` / \`knowledge_get\`,
-regenerate the diff against current content, retry. Never invent
-context.
+Recovery: re-read with \`plot\`, regenerate the diff against
+current content, retry. Never invent context.
+
+Note: \`knowledge_update\` is whole-content replace; pass the full
+new \`content\`. There is no diff format for lesson edits.
 
 ### Mandatory reads at Phase 1 Intake
 
 Before planning any new dispatch, the orchestrator calls:
 
 1. \`registry_list({project})\` — to enumerate agents and the
-   paths each \`active\` row reserves. Drill in via
-   \`agent_get({project, slug})\` as needed.
-2. \`knowledge_get({project})\` — to apply project facts and
-   accumulated learnings to the new plan.
+   paths each \`active\` row reserves.
+2. \`agent_get({project, slug})\` — drill into specific agents
+   when collision details matter.
+3. \`knowledge_list({project})\` — to enumerate every recorded
+   lesson (slug + agentId + timestamps).
+4. \`knowledge_search({project, q})\` — for each topical keyword
+   from the human task. Surface every matching lesson before
+   planning research; lessons are how prior dispatches teach this
+   one.
 
 No dispatch without a fresh reading.
 
@@ -248,9 +261,10 @@ When the human confirms an agent is merged, the orchestrator:
      SHA was wrong.
    - \`postMergeNotes\` describes any drift between planned
      and actual files.
-3. Appends any reusable lesson to the project knowledge via
-   \`knowledge_update({project, diff})\` in the appropriate
-   section.
+3. Records any reusable lesson via
+   \`knowledge_create({project, agentSlug:<this-agent-slug>, slug:<descriptive-kebab-slug>, content:<lesson-body>})\`.
+   Each lesson is one row; structure prose under any internal
+   headings you want, but the row is the unit of addressability.
 
 Skipping these steps breaks the compounding. Enforce.
 

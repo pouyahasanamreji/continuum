@@ -7,14 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { API_BASE, withProject } from "@/lib/api";
 import { useActiveProject } from "@/lib/use-active-project";
 
-// Subset of api/Plot|api/Knowledge — additional fields (id, projectId, createdAt, deletedAt) are ignored by the viewer.
+// Subset of api/Plot — additional fields (id, projectId, createdAt, deletedAt) are ignored by the viewer.
 interface JsonShape {
   content: string;
   updatedAt?: string;
 }
 
 interface Props {
-  endpoint: "plot" | "knowledge";
+  endpoint: "plot";
   emptyMessage?: string;
 }
 

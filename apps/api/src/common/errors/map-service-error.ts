@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import {
   AgentServiceError,
-  KnowledgeUpdateError,
+  KnowledgeServiceError,
   PlotServiceError,
   ProjectServiceError,
 } from './service-errors';
@@ -52,22 +52,25 @@ export function mapServiceError(err: unknown): never {
     }
   }
 
-  if (err instanceof KnowledgeUpdateError) {
+  if (err instanceof KnowledgeServiceError) {
     switch (err.reason) {
       case 'project_not_found':
         notFound('project', 'projectNotFound');
         break;
-      case 'invalid_diff_headers':
-        unprocessable('diff', 'invalidDiffHeaders');
+      case 'agent_not_found':
+        notFound('agent', 'agentNotFound');
         break;
-      case 'parse_failed':
-        unprocessable('diff', 'parseFailed');
+      case 'not_found':
+        notFound('knowledge', 'knowledgeNotFound');
         break;
-      case 'hunk_mismatch':
-        unprocessable('diff', 'hunkMismatch');
+      case 'slug_conflict':
+        conflict('slug', 'slugConflict');
         break;
-      case 'no_current_content':
-        unprocessable('knowledge', 'noCurrentContent');
+      case 'invalid_slug':
+        unprocessable('slug', 'invalidSlug');
+        break;
+      case 'no_change':
+        unprocessable('knowledge', 'noChange');
         break;
     }
   }

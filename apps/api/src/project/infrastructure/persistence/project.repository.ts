@@ -8,7 +8,6 @@ export interface ProjectCreatePayload {
   path: string;
   name: string;
   plotContent: string;
-  knowledgeContent: string;
   now: number;
 }
 

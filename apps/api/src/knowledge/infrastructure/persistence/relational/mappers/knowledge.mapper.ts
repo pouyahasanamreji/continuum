@@ -6,6 +6,8 @@ export class KnowledgeMapper {
     const k = new Knowledge();
     k.id = raw.id;
     k.projectId = raw.project_id;
+    k.agentId = raw.agent_id;
+    k.slug = raw.slug;
     k.content = raw.content;
     k.createdAt = new Date(raw.created_at);
     k.updatedAt = new Date(raw.updated_at);

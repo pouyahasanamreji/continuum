@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getJson, withProject } from "@/lib/api";
 
 interface Props {
-  endpoint: "plot" | "knowledge";
+  endpoint: "plot";
   project: string;
 }
 

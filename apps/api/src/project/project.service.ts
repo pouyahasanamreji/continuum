@@ -101,7 +101,6 @@ export class ProjectService {
       path,
       name,
       plotContent: this.plot.defaultTemplate(),
-      knowledgeContent: '',
       now: Date.now(),
     });
     if (!result.ok) {

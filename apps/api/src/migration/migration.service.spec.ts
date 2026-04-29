@@ -89,9 +89,12 @@ describe('MigrationService', () => {
     });
     expect(r.created).toBe(true);
     expect(r.plotUpdated).toBe(true);
-    expect(r.knowledgeUpdated).toBe(true);
+    expect(r.knowledgeUpdated).toBe(false);
     expect(r.agentsUpserted).toBe(1);
     expect(r.agentsSkipped).toBe(0);
+    expect(r.warnings.some((w) => w.includes('knowledgeContent ignored'))).toBe(
+      true,
+    );
 
     const proj = db
       .prepare('SELECT * FROM projects WHERE path = ?')
@@ -107,11 +110,15 @@ describe('MigrationService', () => {
 
   it('plot history grows on update of existing project', () => {
     const { service, db, idOf } = makeService();
-    service.migrate({
+    const first = service.migrate({
       path: '/tmp/p',
       plotContent: 'v1',
       knowledgeContent: '',
     });
+    expect(first.knowledgeUpdated).toBe(false);
+    expect(
+      first.warnings.some((w) => w.includes('knowledgeContent ignored')),
+    ).toBe(true);
     const r = service.migrate({ path: '/tmp/p', plotContent: 'v2' });
     expect(r.created).toBe(false);
     expect(r.plotUpdated).toBe(true);
@@ -141,6 +148,9 @@ describe('MigrationService', () => {
       .get() as { c: number };
     expect(r.plotUpdated).toBe(false);
     expect(r.knowledgeUpdated).toBe(false);
+    expect(r.warnings.some((w) => w.includes('knowledgeContent ignored'))).toBe(
+      true,
+    );
     expect(after.c).toBe(before.c);
   });
 
