@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import { migrate, SCHEMA_VERSION } from './schema';
 
 interface ColumnInfo {
@@ -10,11 +11,22 @@ interface IndexInfo {
   unique: number;
 }
 
+function loadVec(db: Database.Database): void {
+  if (typeof (sqliteVec as { load?: unknown }).load === 'function') {
+    (sqliteVec as { load: (d: Database.Database) => void }).load(db);
+  } else {
+    db.loadExtension(
+      (sqliteVec as { getLoadablePath: () => string }).getLoadablePath(),
+    );
+  }
+}
+
 describe('migrate idempotency', () => {
   it(`two migrate calls on fresh DB then a third leaves user_version=${SCHEMA_VERSION} with empty tables`, () => {
     const db = new Database(':memory:');
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
+    loadVec(db);
     migrate(db);
     migrate(db);
     migrate(db);
@@ -56,14 +68,31 @@ describe('migrate idempotency', () => {
       .all()
       .map((c) => c.name);
     expect(pcols).toEqual(expect.arrayContaining(['created_at', 'deleted_at']));
+
+    const vec = db
+      .prepare<
+        unknown[],
+        { name: string }
+      >("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_vec'")
+      .get();
+    expect(vec?.name).toBe('knowledge_vec');
+
+    const trig = db
+      .prepare<
+        unknown[],
+        { name: string }
+      >("SELECT name FROM sqlite_master WHERE type='trigger' AND name='knowledge_vec_cleanup'")
+      .get();
+    expect(trig?.name).toBe('knowledge_vec_cleanup');
   });
 });
 
-describe('migrate v7 → v8 incremental', () => {
-  it('adds kind column with default situational; preserves rows; enforces CHECK', () => {
+describe('migrate v8 → v9 incremental', () => {
+  it('adds knowledge_vec virtual table + cleanup trigger; preserves rows', () => {
     const db = new Database(':memory:');
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
+    loadVec(db);
 
     db.exec(`
       CREATE TABLE projects (
@@ -102,13 +131,15 @@ describe('migrate v7 → v8 incremental', () => {
         agent_id   INTEGER NOT NULL REFERENCES agents(id)   ON DELETE CASCADE,
         slug       TEXT NOT NULL,
         content    TEXT NOT NULL,
+        kind       TEXT NOT NULL DEFAULT 'situational'
+                   CHECK (kind IN ('fundamental','situational')),
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         deleted_at INTEGER NULL,
         UNIQUE(project_id, slug)
       );
     `);
-    db.pragma('user_version = 7');
+    db.pragma('user_version = 8');
 
     const now = Date.now();
     const projInfo = db
@@ -124,47 +155,46 @@ describe('migrate v7 → v8 incremental', () => {
       )
       .run(projectId, 'alpha', 'feat/alpha', '/tmp/wt', now, now);
     const agentId = Number(agentInfo.lastInsertRowid);
-    db.prepare(
-      `INSERT INTO knowledge (project_id, agent_id, slug, content, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(projectId, agentId, 'one', 'body', now, now);
+    const kInfo = db
+      .prepare(
+        `INSERT INTO knowledge (project_id, agent_id, slug, content, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(projectId, agentId, 'one', 'body', now, now);
+    const knowledgeId = Number(kInfo.lastInsertRowid);
 
     migrate(db);
 
-    expect(db.pragma('user_version', { simple: true })).toBe(8);
-    const kcols = db
-      .prepare<unknown[], ColumnInfo>('PRAGMA table_info(knowledge)')
-      .all()
-      .map((c) => c.name);
-    expect(kcols).toContain('kind');
+    expect(db.pragma('user_version', { simple: true })).toBe(9);
+    const vec = db
+      .prepare<
+        unknown[],
+        { name: string }
+      >("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_vec'")
+      .get();
+    expect(vec?.name).toBe('knowledge_vec');
 
-    const existing = db
+    const preserved = db
       .prepare<
         [string],
-        { kind: string }
-      >('SELECT kind FROM knowledge WHERE slug = ?')
+        { content: string }
+      >('SELECT content FROM knowledge WHERE slug = ?')
       .get('one');
-    expect(existing?.kind).toBe('situational');
+    expect(preserved?.content).toBe('body');
 
+    const buf = Buffer.from(new Float32Array(768).fill(0.1).buffer);
     db.prepare(
-      `INSERT INTO knowledge (project_id, agent_id, slug, content, kind, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(projectId, agentId, 'two', 'body', 'fundamental', now, now);
-    const fund = db
-      .prepare<
-        [string],
-        { kind: string }
-      >('SELECT kind FROM knowledge WHERE slug = ?')
-      .get('two');
-    expect(fund?.kind).toBe('fundamental');
+      `INSERT INTO knowledge_vec (knowledge_id, embedding) VALUES (?, ?)`,
+    ).run(BigInt(knowledgeId), buf);
+    const vecCount = () => {
+      const row = db
+        .prepare('SELECT count(*) AS c FROM knowledge_vec')
+        .get() as { c: number };
+      return row.c;
+    };
+    expect(vecCount()).toBe(1);
 
-    expect(() =>
-      db
-        .prepare(
-          `INSERT INTO knowledge (project_id, agent_id, slug, content, kind, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(projectId, agentId, 'three', 'body', 'invalid', now, now),
-    ).toThrow();
+    db.prepare('DELETE FROM knowledge WHERE id = ?').run(knowledgeId);
+    expect(vecCount()).toBe(0);
   });
 });
