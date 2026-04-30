@@ -15,6 +15,11 @@ import type { AgentFull, AgentStatus } from "@/types/agent";
 const STATUSES: AgentStatus[] = ["draft", "active", "merged", "abandoned"];
 const MCP_URL = `${API_BASE}/mcp`;
 
+interface PaginatedAgents {
+  data: AgentFull[];
+  hasNextPage: boolean;
+}
+
 export function Dashboard() {
   const activeProject = useActiveProject();
   const [agents, setAgents] = useState<AgentFull[] | null>(null);
@@ -30,11 +35,14 @@ export function Dashboard() {
     let cancelled = false;
     setAgents(null);
     setError(null);
-    getJson<AgentFull[]>(
-      withProject("/api/orchestrator/agents", activeProject),
+    getJson<PaginatedAgents>(
+      withProject("/api/orchestrator/agents?limit=50", activeProject),
     )
-      .then((data) => {
-        if (!cancelled) setAgents(data);
+      .then((res) => {
+        if (!Array.isArray(res.data)) {
+          throw new Error("Malformed agents response");
+        }
+        if (!cancelled) setAgents(res.data);
       })
       .catch((err: unknown) => {
         if (!cancelled)
