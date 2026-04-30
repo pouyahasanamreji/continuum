@@ -397,8 +397,8 @@ export function SettingsPage() {
             <CardTitle>Embedder</CardTitle>
             <CardDescription>
               Used to vectorize knowledge content on create and update. Point
-              this at an OpenAI-compatible embeddings endpoint (e.g. local
-              Ollama serving <code>embeddinggemma</code>).
+              this at Ollama <code>/api/embed</code> or an OpenAI-compatible{" "}
+              <code>/v1/embeddings</code> endpoint such as TEI.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -416,8 +416,16 @@ export function SettingsPage() {
                 id="embedder-url"
                 value={form.embedderUrl}
                 onChange={(e) => setForm({ embedderUrl: e.target.value })}
-                placeholder="http://localhost:11434/api/embed"
+                placeholder="http://embedder:80/v1/embeddings"
               />
+              <p className="text-xs text-muted-foreground">
+                Compose API to TEI:{" "}
+                <code>http://embedder:80/v1/embeddings</code>. Compose API to
+                host Ollama:{" "}
+                <code>http://host.docker.internal:11434/api/embed</code>. Local
+                API to TEI:{" "}
+                <code>http://127.0.0.1:8080/v1/embeddings</code>.
+              </p>
               {effective.embedderUrl === "env" && form.embedderUrl === "" && (
                 <p className="text-xs text-muted-foreground">
                   Currently provided by environment variable.
@@ -437,8 +445,13 @@ export function SettingsPage() {
                 id="embedder-model"
                 value={form.embedderModel}
                 onChange={(e) => setForm({ embedderModel: e.target.value })}
-                placeholder="embeddinggemma"
+                placeholder="google/embeddinggemma-300m"
               />
+              <p className="text-xs text-muted-foreground">
+                TEI users should set{" "}
+                <code>google/embeddinggemma-300m</code>. Ollama users can leave
+                this empty for the app default.
+              </p>
               {effective.embedderModel === "env" &&
                 form.embedderModel === "" && (
                   <p className="text-xs text-muted-foreground">

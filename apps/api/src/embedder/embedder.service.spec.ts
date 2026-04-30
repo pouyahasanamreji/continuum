@@ -129,6 +129,58 @@ describe('EmbedderService', () => {
     expect(body).toEqual({ model: 'embeddinggemma', input: 'the-text' });
   });
 
+  it('posts OpenAI-compatible body to /v1/embeddings URLs', async () => {
+    const service = make(
+      new Map([['EMBEDDER_URL', 'http://embedder:80/v1/embeddings']]),
+    );
+    fetchSpy.mockResolvedValue(
+      jsonResponse(200, { data: [{ embedding: [0.1, 0.2] }] }),
+    );
+    await service.embed('the-text');
+    const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
+    expect(calls[0][0]).toBe('http://embedder:80/v1/embeddings');
+    const init = calls[0][1] as RequestInit;
+    const body = JSON.parse(init.body as string) as {
+      model: string;
+      input: string;
+      encoding_format: string;
+    };
+    expect(body).toEqual({
+      model: 'embeddinggemma',
+      input: 'the-text',
+      encoding_format: 'float',
+    });
+  });
+
+  it('parses OpenAI-compatible embedding response from /v1/embeddings', async () => {
+    const service = make(
+      new Map([['EMBEDDER_URL', 'http://embedder:80/v1/embeddings']]),
+    );
+    fetchSpy.mockResolvedValue(
+      jsonResponse(200, { data: [{ embedding: [0.1, 0.2] }] }),
+    );
+    await expect(service.embed('hello')).resolves.toEqual([0.1, 0.2]);
+  });
+
+  it.each([
+    ['missing data', {}],
+    ['empty data', { data: [] }],
+    ['missing embedding', { data: [{}] }],
+    ['empty embedding', { data: [{ embedding: [] }] }],
+    ['non-numeric embedding values', { data: [{ embedding: [0.1, 'x'] }] }],
+  ])(
+    'throws bad_response_shape for OpenAI-compatible response with %s',
+    async (_label, body) => {
+      const service = make(
+        new Map([['EMBEDDER_URL', 'http://embedder:80/v1/embeddings']]),
+      );
+      fetchSpy.mockResolvedValue(jsonResponse(200, body));
+      await expect(service.embed('hello')).rejects.toMatchObject({
+        reason: 'bad_response_shape',
+      });
+    },
+  );
+
   it('DB URL wins over env', async () => {
     process.env.EMBEDDER_URL = 'http://env';
     const service = make(new Map([['EMBEDDER_URL', 'http://db']]));
@@ -190,5 +242,26 @@ describe('EmbedderService', () => {
       model: string;
     };
     expect(body.model).toBe('db-model');
+  });
+
+  it('uses DB/env model precedence for OpenAI-compatible requests', async () => {
+    process.env.EMBEDDER_MODEL = 'env-model';
+    const service = make(
+      new Map([
+        ['EMBEDDER_URL', 'http://embedder:80/v1/embeddings'],
+        ['EMBEDDER_MODEL', 'google/embeddinggemma-300m'],
+      ]),
+    );
+    fetchSpy.mockResolvedValue(
+      jsonResponse(200, { data: [{ embedding: [0.1, 0.2] }] }),
+    );
+    await service.embed('hi');
+    const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
+    const body = JSON.parse((calls[0][1] as RequestInit).body as string) as {
+      model: string;
+      encoding_format: string;
+    };
+    expect(body.model).toBe('google/embeddinggemma-300m');
+    expect(body.encoding_format).toBe('float');
   });
 });
