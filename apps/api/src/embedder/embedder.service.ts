@@ -1,12 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EmbedderError } from './embedder.error';
 import { AppSettingsService } from '../app-settings/app-settings.service';
-import {
-  SETTING_EMBEDDER_MODEL,
-  SETTING_EMBEDDER_URL,
-} from '../app-settings/app-settings.keys';
+import { DEFAULT_EMBEDDER_MODEL, EmbeddedVector } from './embedder-profile';
 
-const DEFAULT_MODEL = 'embeddinggemma';
 const TIMEOUT_MS = 30_000;
 const OPENAI_EMBEDDINGS_PATH = '/v1/embeddings';
 
@@ -20,21 +16,28 @@ export class EmbedderService {
   constructor(private readonly settings: AppSettingsService) {}
 
   async embed(text: string): Promise<number[]> {
-    const url = this.settings.resolve(SETTING_EMBEDDER_URL);
-    if (!url) throw new EmbedderError('url_missing');
-    const model =
-      this.settings.resolve(SETTING_EMBEDDER_MODEL) ?? DEFAULT_MODEL;
+    return (await this.embedWithProfile(text)).embedding;
+  }
+
+  async embedWithProfile(text: string): Promise<EmbeddedVector> {
+    const resolved = this.settings.resolveEmbedderProfile();
+    if (!resolved.url) throw new EmbedderError('url_missing');
+    const profile = {
+      url: resolved.url,
+      model: resolved.model || DEFAULT_EMBEDDER_MODEL,
+      dim: resolved.dim,
+    };
 
     let response: Response;
     try {
-      const openAiCompatible = this.isOpenAiEmbeddingsUrl(url);
-      response = await fetch(url, {
+      const openAiCompatible = this.isOpenAiEmbeddingsUrl(profile.url);
+      response = await fetch(profile.url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(
           openAiCompatible
-            ? { model, input: text, encoding_format: 'float' }
-            : { model, input: text },
+            ? { model: profile.model, input: text, encoding_format: 'float' }
+            : { model: profile.model, input: text },
         ),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
@@ -53,13 +56,19 @@ export class EmbedderService {
     }
 
     const body = (await response.json()) as unknown;
-    const vec = this.isOpenAiEmbeddingsUrl(url)
+    const vec = this.isOpenAiEmbeddingsUrl(profile.url)
       ? this.readOpenAiEmbedding(body)
       : this.readOllamaEmbedding(body);
     if (!this.isValidEmbedding(vec)) {
       throw new EmbedderError('bad_response_shape');
     }
-    return vec;
+    if (vec.length !== profile.dim) {
+      throw new EmbedderError(
+        'dimension_mismatch',
+        `got ${vec.length} expected ${profile.dim}`,
+      );
+    }
+    return { embedding: vec, profile };
   }
 
   private isOpenAiEmbeddingsUrl(url: string): boolean {

@@ -172,8 +172,16 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
 
   findAllForVectorize(
     mode: 'missing' | 'all',
+    signature?: string,
   ): Array<{ id: number; content: string }> {
     if (mode === 'all') {
+      return this.dbs.db
+        .prepare(
+          `SELECT id, content FROM knowledge WHERE deleted_at IS NULL ORDER BY id ASC`,
+        )
+        .all() as Array<{ id: number; content: string }>;
+    }
+    if (!signature) {
       return this.dbs.db
         .prepare(
           `SELECT id, content FROM knowledge WHERE deleted_at IS NULL ORDER BY id ASC`,
@@ -187,11 +195,13 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
         `SELECT id, content FROM knowledge
          WHERE deleted_at IS NULL
            AND NOT EXISTS (
-             SELECT 1 FROM knowledge_vec WHERE knowledge_vec.knowledge_id = knowledge.id
+             SELECT 1 FROM knowledge_vec
+             WHERE knowledge_vec.knowledge_id = knowledge.id
+               AND knowledge_vec.embedder_signature = ?
            )
          ORDER BY id ASC`,
       )
-      .all() as Array<{ id: number; content: string }>;
+      .all(signature) as Array<{ id: number; content: string }>;
   }
 
   // Plain LIKE %query%; ASCII case-insensitive only. % and _ in query act as
@@ -230,6 +240,7 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
     queryEmbedding: number[],
     kind: KnowledgeKindEnum | undefined,
     limit: number,
+    signature: string,
   ): Knowledge[] {
     // Overfetch from vec0 because top-K runs BEFORE the post-JOIN project/kind filter.
     const K_VEC = Math.min(200, Math.max(50, limit * 5 + 20));
@@ -237,10 +248,16 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
     const where: string[] = [
       'kv.embedding MATCH ?',
       'kv.k = ?',
+      'kv.embedder_signature = ?',
       'k.project_id = ?',
       'k.deleted_at IS NULL',
     ];
-    const params: (Buffer | number | string)[] = [buf, K_VEC, projectId];
+    const params: (Buffer | number | string)[] = [
+      buf,
+      K_VEC,
+      signature,
+      projectId,
+    ];
     if (kind !== undefined) {
       where.push('k.kind = ?');
       params.push(kind);
@@ -256,5 +273,30 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
       .prepare<(Buffer | number | string)[], KnowledgeEntity>(sql)
       .all(...params);
     return rows.map((r) => KnowledgeMapper.toDomain(r));
+  }
+
+  countFreshForSearch(
+    projectId: number,
+    kind: KnowledgeKindEnum | undefined,
+    signature: string,
+  ): number {
+    const where: string[] = [
+      'k.project_id = ?',
+      'k.deleted_at IS NULL',
+      'kv.embedder_signature = ?',
+    ];
+    const params: (number | string)[] = [projectId, signature];
+    if (kind !== undefined) {
+      where.push('k.kind = ?');
+      params.push(kind);
+    }
+    const row = this.dbs.db
+      .prepare<(number | string)[], { c: number }>(
+        `SELECT COUNT(*) AS c FROM knowledge k
+         JOIN knowledge_vec kv ON kv.knowledge_id = k.id
+         WHERE ${where.join(' AND ')}`,
+      )
+      .get(...params);
+    return row?.c ?? 0;
   }
 }

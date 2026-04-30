@@ -1,6 +1,11 @@
 import { EmbedderService } from './embedder.service';
 import { EmbedderError } from './embedder.error';
 import { AppSettingsService } from '../app-settings/app-settings.service';
+import {
+  DEFAULT_EMBEDDER_DIM,
+  DEFAULT_EMBEDDER_MODEL,
+  makeEmbedderSignature,
+} from './embedder-profile';
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -18,6 +23,30 @@ class StubAppSettings {
     if (fromStore !== null && fromStore !== '') return fromStore;
     return process.env[key] ?? null;
   }
+  resolveEmbedderProfile() {
+    const url = this.resolve('EMBEDDER_URL');
+    const model = this.resolve('EMBEDDER_MODEL') ?? DEFAULT_EMBEDDER_MODEL;
+    const dimRaw = this.resolve('EMBEDDER_DIM');
+    const parsed = dimRaw === null ? NaN : Number.parseInt(dimRaw, 10);
+    const dim =
+      Number.isNaN(parsed) || parsed < 1 ? DEFAULT_EMBEDDER_DIM : parsed;
+    if (!url) {
+      return {
+        url: null,
+        model,
+        dim,
+        configured: false,
+        signature: null,
+      };
+    }
+    return {
+      url,
+      model,
+      dim,
+      configured: true,
+      signature: makeEmbedderSignature({ url, model, dim }),
+    };
+  }
 }
 
 const make = (store?: Map<string, string | null>) =>
@@ -28,16 +57,22 @@ const make = (store?: Map<string, string | null>) =>
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
 
+const vec = (dim = DEFAULT_EMBEDDER_DIM, value = 0.1): number[] =>
+  Array.from({ length: dim }, () => value);
+
 describe('EmbedderService', () => {
   let savedUrl: string | undefined;
   let savedModel: string | undefined;
+  let savedDim: string | undefined;
   let fetchSpy: jest.SpiedFunction<typeof fetch>;
 
   beforeEach(() => {
     savedUrl = process.env.EMBEDDER_URL;
     savedModel = process.env.EMBEDDER_MODEL;
+    savedDim = process.env.EMBEDDER_DIM;
     delete process.env.EMBEDDER_URL;
     delete process.env.EMBEDDER_MODEL;
+    delete process.env.EMBEDDER_DIM;
     fetchSpy = jest.spyOn(globalThis, 'fetch');
   });
 
@@ -46,6 +81,8 @@ describe('EmbedderService', () => {
     else process.env.EMBEDDER_URL = savedUrl;
     if (savedModel === undefined) delete process.env.EMBEDDER_MODEL;
     else process.env.EMBEDDER_MODEL = savedModel;
+    if (savedDim === undefined) delete process.env.EMBEDDER_DIM;
+    else process.env.EMBEDDER_DIM = savedDim;
     fetchSpy.mockRestore();
   });
 
@@ -106,14 +143,43 @@ describe('EmbedderService', () => {
 
   it('returns embedding vector on 2xx', async () => {
     const service = make(new Map([['EMBEDDER_URL', 'http://x/embed']]));
-    const vec = [0.1, 0.2, 0.3];
-    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [vec] }));
-    await expect(service.embed('hello')).resolves.toEqual(vec);
+    const embedding = vec();
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [embedding] }));
+    await expect(service.embed('hello')).resolves.toEqual(embedding);
+  });
+
+  it('embedWithProfile returns embedding and profile metadata', async () => {
+    const service = make(
+      new Map([
+        ['EMBEDDER_URL', 'http://x/embed'],
+        ['EMBEDDER_MODEL', 'profile-model'],
+        ['EMBEDDER_DIM', '3'],
+      ]),
+    );
+    fetchSpy.mockResolvedValue(
+      jsonResponse(200, { embeddings: [[0.1, 0.2, 0.3]] }),
+    );
+    await expect(service.embedWithProfile('hello')).resolves.toMatchObject({
+      embedding: [0.1, 0.2, 0.3],
+      profile: {
+        url: 'http://x/embed',
+        model: 'profile-model',
+        dim: 3,
+      },
+    });
+  });
+
+  it('throws dimension_mismatch when vector length differs from profile dim', async () => {
+    const service = make(new Map([['EMBEDDER_URL', 'http://x/embed']]));
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[0.1]] }));
+    await expect(service.embed('hello')).rejects.toMatchObject({
+      reason: 'dimension_mismatch',
+    });
   });
 
   it('posts model=embeddinggemma + input=text body to URL exactly', async () => {
     const service = make(new Map([['EMBEDDER_URL', 'http://x/embed']]));
-    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[0.1]] }));
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [vec()] }));
     await service.embed('the-text');
     const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
     expect(calls[0][0]).toBe('http://x/embed');
@@ -134,7 +200,7 @@ describe('EmbedderService', () => {
       new Map([['EMBEDDER_URL', 'http://embedder:80/v1/embeddings']]),
     );
     fetchSpy.mockResolvedValue(
-      jsonResponse(200, { data: [{ embedding: [0.1, 0.2] }] }),
+      jsonResponse(200, { data: [{ embedding: vec() }] }),
     );
     await service.embed('the-text');
     const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
@@ -156,10 +222,9 @@ describe('EmbedderService', () => {
     const service = make(
       new Map([['EMBEDDER_URL', 'http://embedder:80/v1/embeddings']]),
     );
-    fetchSpy.mockResolvedValue(
-      jsonResponse(200, { data: [{ embedding: [0.1, 0.2] }] }),
-    );
-    await expect(service.embed('hello')).resolves.toEqual([0.1, 0.2]);
+    const embedding = vec();
+    fetchSpy.mockResolvedValue(jsonResponse(200, { data: [{ embedding }] }));
+    await expect(service.embed('hello')).resolves.toEqual(embedding);
   });
 
   it.each([
@@ -184,7 +249,7 @@ describe('EmbedderService', () => {
   it('DB URL wins over env', async () => {
     process.env.EMBEDDER_URL = 'http://env';
     const service = make(new Map([['EMBEDDER_URL', 'http://db']]));
-    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[0.1]] }));
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [vec()] }));
     await service.embed('hi');
     const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
     expect(calls[0][0]).toBe('http://db');
@@ -193,7 +258,7 @@ describe('EmbedderService', () => {
   it('falls back to env URL when DB empty string', async () => {
     process.env.EMBEDDER_URL = 'http://env';
     const service = make(new Map([['EMBEDDER_URL', '']]));
-    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[0.1]] }));
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [vec()] }));
     await service.embed('hi');
     const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
     expect(calls[0][0]).toBe('http://env');
@@ -206,7 +271,7 @@ describe('EmbedderService', () => {
         ['EMBEDDER_MODEL', 'mxbai-embed-large'],
       ]),
     );
-    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[0.1]] }));
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [vec()] }));
     await service.embed('hi');
     const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
     const body = JSON.parse((calls[0][1] as RequestInit).body as string) as {
@@ -218,7 +283,7 @@ describe('EmbedderService', () => {
   it('env-set EMBEDDER_MODEL overrides default when DB unset', async () => {
     process.env.EMBEDDER_MODEL = 'env-model';
     const service = make(new Map([['EMBEDDER_URL', 'http://x/embed']]));
-    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[0.1]] }));
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [vec()] }));
     await service.embed('hi');
     const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
     const body = JSON.parse((calls[0][1] as RequestInit).body as string) as {
@@ -235,7 +300,7 @@ describe('EmbedderService', () => {
         ['EMBEDDER_MODEL', 'db-model'],
       ]),
     );
-    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [[0.1]] }));
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [vec()] }));
     await service.embed('hi');
     const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;
     const body = JSON.parse((calls[0][1] as RequestInit).body as string) as {
@@ -253,7 +318,7 @@ describe('EmbedderService', () => {
       ]),
     );
     fetchSpy.mockResolvedValue(
-      jsonResponse(200, { data: [{ embedding: [0.1, 0.2] }] }),
+      jsonResponse(200, { data: [{ embedding: vec() }] }),
     );
     await service.embed('hi');
     const calls = fetchSpy.mock.calls as Array<[FetchInput, FetchInit]>;

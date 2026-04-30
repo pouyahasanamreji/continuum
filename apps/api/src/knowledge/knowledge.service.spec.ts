@@ -11,6 +11,12 @@ import { AgentRelationalRepository } from '../agent/infrastructure/persistence/r
 import { EmbedderService } from '../embedder/embedder.service';
 import { EmbedderError } from '../embedder/embedder.error';
 import { AppSettingsService } from '../app-settings/app-settings.service';
+import {
+  DEFAULT_EMBEDDER_DIM,
+  DEFAULT_EMBEDDER_MODEL,
+  EmbedderProfile,
+  makeEmbedderSignature,
+} from '../embedder/embedder-profile';
 
 class StubDb {
   constructor(public readonly db: Database.Database) {}
@@ -22,6 +28,30 @@ class StubAppSettings {
     const v = this.store.has(key) ? (this.store.get(key) ?? null) : null;
     if (v !== null && v !== '') return v;
     return process.env[key] ?? null;
+  }
+  resolveEmbedderProfile() {
+    const url = this.resolve('EMBEDDER_URL');
+    const model = this.resolve('EMBEDDER_MODEL') ?? DEFAULT_EMBEDDER_MODEL;
+    const dimRaw = this.resolve('EMBEDDER_DIM');
+    const parsed = dimRaw === null ? NaN : Number.parseInt(dimRaw, 10);
+    const dim =
+      Number.isNaN(parsed) || parsed < 1 ? DEFAULT_EMBEDDER_DIM : parsed;
+    if (!url) {
+      return {
+        url: null,
+        model,
+        dim,
+        configured: false,
+        signature: null,
+      };
+    }
+    return {
+      url,
+      model,
+      dim,
+      configured: true,
+      signature: makeEmbedderSignature({ url, model, dim }),
+    };
   }
   readAllForPanel() {
     const dimRaw = this.resolve('EMBEDDER_DIM');
@@ -55,6 +85,18 @@ function loadVec(db: Database.Database): void {
 }
 
 const PROJECT_PATH = '/Users/foo/proj';
+const TEST_PROFILE: EmbedderProfile = {
+  url: 'http://embedder/v1/embeddings',
+  model: DEFAULT_EMBEDDER_MODEL,
+  dim: DEFAULT_EMBEDDER_DIM,
+};
+const TEST_SIGNATURE = makeEmbedderSignature(TEST_PROFILE);
+const embedding = (dim = DEFAULT_EMBEDDER_DIM, value = 0.1): number[] =>
+  Array.from({ length: dim }, () => value);
+const embedded = (vec = embedding(), profile = TEST_PROFILE) => ({
+  embedding: vec,
+  profile,
+});
 
 interface Harness {
   service: KnowledgeService;
@@ -62,7 +104,7 @@ interface Harness {
   vecRepo: RelationalKnowledgeVectorRepository;
   projectRepo: ProjectRelationalRepository;
   agentRepo: AgentRelationalRepository;
-  embedder: { embed: jest.Mock };
+  embedder: { embed: jest.Mock; embedWithProfile: jest.Mock };
   settings: StubAppSettings;
   db: Database.Database;
   agentId: (slug: string) => number;
@@ -108,9 +150,16 @@ function makeHarness(): Harness {
   }
 
   const embedder = {
-    embed: jest.fn().mockResolvedValue(new Array(768).fill(0.1)),
+    embed: jest.fn().mockResolvedValue(embedding()),
+    embedWithProfile: jest.fn().mockResolvedValue(embedded()),
   };
-  const settings = new StubAppSettings();
+  const settings = new StubAppSettings(
+    new Map([
+      ['EMBEDDER_URL', TEST_PROFILE.url],
+      ['EMBEDDER_MODEL', TEST_PROFILE.model],
+      ['EMBEDDER_DIM', String(TEST_PROFILE.dim)],
+    ]),
+  );
   const service = new KnowledgeService(
     knowledgeRepo,
     projectRepo,
@@ -438,7 +487,9 @@ describe('KnowledgeService.search', () => {
       slug: 'one',
       content: 'unique-body',
     });
-    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    embedder.embedWithProfile.mockRejectedValueOnce(
+      new EmbedderError('url_missing'),
+    );
     expect(await service.search(PROJECT_PATH, 'absent', undefined)).toEqual([]);
   });
 
@@ -457,7 +508,9 @@ describe('KnowledgeService.search', () => {
       slug: 'two',
       content: 'unrelated',
     });
-    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    embedder.embedWithProfile.mockRejectedValueOnce(
+      new EmbedderError('url_missing'),
+    );
     const found = await service.search(PROJECT_PATH, 'cascade', undefined);
     expect(found.length).toBe(1);
     expect(found[0].slug).toBe('one');
@@ -472,7 +525,9 @@ describe('KnowledgeService.search', () => {
       slug: 'cascade-rule',
       content: 'body',
     });
-    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    embedder.embedWithProfile.mockRejectedValueOnce(
+      new EmbedderError('url_missing'),
+    );
     const found = await service.search(PROJECT_PATH, 'cascade', undefined);
     expect(found.length).toBe(1);
   });
@@ -488,7 +543,9 @@ describe('KnowledgeService.search', () => {
         content: `match-${i}`,
       });
     }
-    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    embedder.embedWithProfile.mockRejectedValueOnce(
+      new EmbedderError('url_missing'),
+    );
     const found = await service.search(PROJECT_PATH, 'match', undefined, 2);
     expect(found.length).toBe(2);
   });
@@ -502,7 +559,9 @@ describe('KnowledgeService.search', () => {
       slug: 'one',
       content: 'match',
     });
-    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    embedder.embedWithProfile.mockRejectedValueOnce(
+      new EmbedderError('url_missing'),
+    );
     expect(
       (await service.search(PROJECT_PATH, 'match', undefined, 9999)).length,
     ).toBe(1);
@@ -531,10 +590,10 @@ describe('KnowledgeService.search vector path', () => {
     });
     const vecSpy = jest.spyOn(knowledgeRepo, 'searchByVector');
     const likeSpy = jest.spyOn(knowledgeRepo, 'searchByContent');
-    embedder.embed.mockClear();
-    embedder.embed.mockResolvedValueOnce(new Array(768).fill(0.1));
+    embedder.embedWithProfile.mockClear();
+    embedder.embedWithProfile.mockResolvedValueOnce(embedded());
     const found = await service.search(PROJECT_PATH, 'anything', undefined);
-    expect(embedder.embed).toHaveBeenCalledTimes(1);
+    expect(embedder.embedWithProfile).toHaveBeenCalledTimes(1);
     expect(vecSpy).toHaveBeenCalledTimes(1);
     expect(likeSpy).not.toHaveBeenCalled();
     expect(found.length).toBe(1);
@@ -557,7 +616,9 @@ describe('KnowledgeService.search vector path', () => {
         'warn',
       )
       .mockImplementation(() => undefined);
-    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    embedder.embedWithProfile.mockRejectedValueOnce(
+      new EmbedderError('url_missing'),
+    );
     const found = await service.search(PROJECT_PATH, 'cascade', undefined);
     expect(vecSpy).not.toHaveBeenCalled();
     expect(likeSpy).toHaveBeenCalledTimes(1);
@@ -584,7 +645,7 @@ describe('KnowledgeService.search vector path', () => {
         'warn',
       )
       .mockImplementation(() => undefined);
-    embedder.embed.mockRejectedValueOnce(
+    embedder.embedWithProfile.mockRejectedValueOnce(
       new EmbedderError('upstream_failed', 'boom'),
     );
     const found = await service.search(PROJECT_PATH, 'cascade', undefined);
@@ -614,12 +675,35 @@ describe('KnowledgeService.search vector path', () => {
         'warn',
       )
       .mockImplementation(() => undefined);
-    embedder.embed.mockResolvedValueOnce(new Array(768).fill(0.1));
+    embedder.embedWithProfile.mockResolvedValueOnce(embedded());
     const found = await service.search(PROJECT_PATH, 'cascade', undefined);
     expect(vecSpy).toHaveBeenCalledTimes(1);
     expect(likeSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('vec0 boom'));
     expect(found.length).toBe(1);
+  });
+
+  it('q + embedder OK + no fresh vectors for signature → falls back to LIKE', async () => {
+    const { service, seedAgent, embedder, knowledgeRepo } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'one',
+      content: 'cascade body',
+    });
+    const nextProfile = { ...TEST_PROFILE, model: 'next-model' };
+    embedder.embedWithProfile.mockResolvedValueOnce(
+      embedded(embedding(), nextProfile),
+    );
+    const vecSpy = jest.spyOn(knowledgeRepo, 'searchByVector');
+    const likeSpy = jest.spyOn(knowledgeRepo, 'searchByContent');
+
+    const found = await service.search(PROJECT_PATH, 'cascade', undefined);
+
+    expect(vecSpy).not.toHaveBeenCalled();
+    expect(likeSpy).toHaveBeenCalledTimes(1);
+    expect(found.map((r) => r.slug)).toEqual(['one']);
   });
 
   it('kind only (no q) → embedder NOT called; searchByContent called with query=undefined', async () => {
@@ -632,11 +716,11 @@ describe('KnowledgeService.search vector path', () => {
       content: 'x',
       kind: 'fundamental',
     });
-    embedder.embed.mockClear();
+    embedder.embedWithProfile.mockClear();
     const vecSpy = jest.spyOn(knowledgeRepo, 'searchByVector');
     const likeSpy = jest.spyOn(knowledgeRepo, 'searchByContent');
     await service.search(PROJECT_PATH, undefined, 'fundamental');
-    expect(embedder.embed).not.toHaveBeenCalled();
+    expect(embedder.embedWithProfile).not.toHaveBeenCalled();
     expect(vecSpy).not.toHaveBeenCalled();
     expect(likeSpy).toHaveBeenCalledWith(
       expect.any(Number),
@@ -756,7 +840,9 @@ describe('KnowledgeService kind field', () => {
       content: 'unrelated',
       kind: 'fundamental',
     });
-    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    embedder.embedWithProfile.mockRejectedValueOnce(
+      new EmbedderError('url_missing'),
+    );
     const found = await service.search(PROJECT_PATH, 'cascade', 'fundamental');
     expect(found.length).toBe(1);
     expect(found[0].slug).toBe('a');
@@ -800,7 +886,7 @@ describe('KnowledgeService kind field', () => {
 });
 
 describe('KnowledgeService vectorization', () => {
-  it('create with embedder stubbed → row exists in knowledge_vec', async () => {
+  it('create with embedder stubbed → row exists with vector metadata', async () => {
     const { service, seedAgent, embedder, db } = makeHarness();
     seedAgent('alpha');
     await service.create({
@@ -809,19 +895,43 @@ describe('KnowledgeService vectorization', () => {
       slug: 'one',
       content: 'body',
     });
-    expect(embedder.embed).toHaveBeenCalledWith('body');
+    expect(embedder.embedWithProfile).toHaveBeenCalledWith('body');
     const c = (
       db.prepare('SELECT COUNT(*) AS c FROM knowledge_vec').get() as {
         c: number;
       }
     ).c;
     expect(c).toBe(1);
+    const vecRow = db
+      .prepare<
+        unknown[],
+        { embedder_signature: string }
+      >('SELECT embedder_signature FROM knowledge_vec')
+      .get();
+    expect(vecRow?.embedder_signature).toBe(TEST_SIGNATURE);
+    const meta = db
+      .prepare<
+        unknown[],
+        {
+          embedder_model: string;
+          embedder_dim: number;
+          embedder_url: string;
+          embedder_signature: string;
+        }
+      >('SELECT * FROM knowledge_vec_meta')
+      .get();
+    expect(meta).toMatchObject({
+      embedder_model: TEST_PROFILE.model,
+      embedder_dim: TEST_PROFILE.dim,
+      embedder_url: TEST_PROFILE.url,
+      embedder_signature: TEST_SIGNATURE,
+    });
   });
 
   it('create with embedder rejecting → no throw, knowledge row exists, vec absent', async () => {
     const { service, seedAgent, embedder, db } = makeHarness();
     seedAgent('alpha');
-    embedder.embed.mockRejectedValueOnce(
+    embedder.embedWithProfile.mockRejectedValueOnce(
       new EmbedderError('upstream_failed', 'econnrefused'),
     );
     const k = await service.create({
@@ -843,10 +953,10 @@ describe('KnowledgeService vectorization', () => {
     expect(vrow).toBe(0);
   });
 
-  it('update with content patch → vec row replaced', async () => {
+  it('update with content patch → vec row and metadata are replaced', async () => {
     const { service, seedAgent, embedder, db } = makeHarness();
     seedAgent('alpha');
-    embedder.embed.mockResolvedValueOnce(new Array(768).fill(0.1));
+    embedder.embedWithProfile.mockResolvedValueOnce(embedded());
     await service.create({
       project: PROJECT_PATH,
       agentSlug: 'alpha',
@@ -858,13 +968,16 @@ describe('KnowledgeService vectorization', () => {
         .prepare('SELECT substr(hex(embedding), 1, 8) AS h FROM knowledge_vec')
         .get() as { h: string }
     ).h;
-    embedder.embed.mockResolvedValueOnce(new Array(768).fill(0.9));
+    const nextProfile = { ...TEST_PROFILE, model: 'next-model' };
+    embedder.embedWithProfile.mockResolvedValueOnce(
+      embedded(embedding(768, 0.9), nextProfile),
+    );
     await service.update('one', {
       project: PROJECT_PATH,
       content: 'new',
     });
-    expect(embedder.embed).toHaveBeenCalledTimes(2);
-    expect(embedder.embed).toHaveBeenLastCalledWith('new');
+    expect(embedder.embedWithProfile).toHaveBeenCalledTimes(2);
+    expect(embedder.embedWithProfile).toHaveBeenLastCalledWith('new');
     const c = (
       db.prepare('SELECT COUNT(*) AS c FROM knowledge_vec').get() as {
         c: number;
@@ -877,6 +990,16 @@ describe('KnowledgeService vectorization', () => {
         .get() as { h: string }
     ).h;
     expect(hexAfter).not.toBe(hexBefore);
+    const meta = db
+      .prepare<
+        unknown[],
+        { embedder_model: string; embedder_signature: string }
+      >('SELECT embedder_model, embedder_signature FROM knowledge_vec_meta')
+      .get();
+    expect(meta).toEqual({
+      embedder_model: 'next-model',
+      embedder_signature: makeEmbedderSignature(nextProfile),
+    });
   });
 
   it('update without content patch (kind only) → embedder NOT called', async () => {
@@ -888,12 +1011,12 @@ describe('KnowledgeService vectorization', () => {
       slug: 'one',
       content: 'x',
     });
-    embedder.embed.mockClear();
+    embedder.embedWithProfile.mockClear();
     await service.update('one', {
       project: PROJECT_PATH,
       kind: 'fundamental',
     });
-    expect(embedder.embed).not.toHaveBeenCalled();
+    expect(embedder.embedWithProfile).not.toHaveBeenCalled();
   });
 
   it('remove → vec row gone (trigger fires)', async () => {
@@ -920,12 +1043,21 @@ describe('KnowledgeService vectorization', () => {
         }
       ).c,
     ).toBe(0);
+    expect(
+      (
+        db.prepare('SELECT COUNT(*) AS c FROM knowledge_vec_meta').get() as {
+          c: number;
+        }
+      ).c,
+    ).toBe(0);
   });
 
   it('embedder url_missing → swallowed (no throw)', async () => {
     const { service, seedAgent, embedder, db } = makeHarness();
     seedAgent('alpha');
-    embedder.embed.mockRejectedValueOnce(new EmbedderError('url_missing'));
+    embedder.embedWithProfile.mockRejectedValueOnce(
+      new EmbedderError('url_missing'),
+    );
     await expect(
       service.create({
         project: PROJECT_PATH,
@@ -961,18 +1093,49 @@ describe('KnowledgeService.vectorizeAll', () => {
       `DELETE FROM knowledge_vec WHERE knowledge_id IN
        (SELECT id FROM knowledge WHERE slug IN ('b', 'c'))`,
     ).run();
-    embedder.embed.mockClear();
+    embedder.embedWithProfile.mockClear();
     const result = await service.vectorizeAll({ mode: 'missing' });
     expect(result.processed).toBe(2);
     expect(result.errors).toBe(0);
     expect(result.skipped).toBe(0);
-    expect(embedder.embed).toHaveBeenCalledTimes(2);
+    expect(embedder.embedWithProfile).toHaveBeenCalledTimes(2);
     const c = (
       db.prepare('SELECT COUNT(*) AS c FROM knowledge_vec').get() as {
         c: number;
       }
     ).c;
     expect(c).toBe(3);
+  });
+
+  it('mode=missing regenerates same-dim stale rows after model changes', async () => {
+    const { service, seedAgent, embedder, settings, db } = makeHarness();
+    seedAgent('alpha');
+    for (const slug of ['a', 'b']) {
+      await service.create({
+        project: PROJECT_PATH,
+        agentSlug: 'alpha',
+        slug,
+        content: `body-${slug}`,
+      });
+    }
+    const nextProfile = { ...TEST_PROFILE, model: 'next-model' };
+    settings.store.set('EMBEDDER_MODEL', nextProfile.model);
+    embedder.embedWithProfile.mockClear();
+    embedder.embedWithProfile.mockResolvedValue(
+      embedded(embedding(), nextProfile),
+    );
+
+    const result = await service.vectorizeAll({ mode: 'missing' });
+
+    expect(result.processed).toBe(2);
+    expect(embedder.embedWithProfile).toHaveBeenCalledTimes(2);
+    const signatures = db
+      .prepare<unknown[], { embedder_signature: string }>(
+        `SELECT DISTINCT embedder_signature FROM knowledge_vec`,
+      )
+      .all()
+      .map((r) => r.embedder_signature);
+    expect(signatures).toEqual([makeEmbedderSignature(nextProfile)]);
   });
 
   it('mode=all without targetDim deletes existing vec rows and re-embeds all', async () => {
@@ -986,10 +1149,10 @@ describe('KnowledgeService.vectorizeAll', () => {
         content: `body-${slug}`,
       });
     }
-    embedder.embed.mockClear();
+    embedder.embedWithProfile.mockClear();
     const result = await service.vectorizeAll({ mode: 'all' });
     expect(result.processed).toBe(2);
-    expect(embedder.embed).toHaveBeenCalledTimes(2);
+    expect(embedder.embedWithProfile).toHaveBeenCalledTimes(2);
     const c = (
       db.prepare('SELECT COUNT(*) AS c FROM knowledge_vec').get() as {
         c: number;
@@ -999,7 +1162,8 @@ describe('KnowledgeService.vectorizeAll', () => {
   });
 
   it('mode=all with targetDim=512 recreates table at 512 and trigger still fires', async () => {
-    const { service, seedAgent, vecRepo, embedder, db } = makeHarness();
+    const { service, seedAgent, vecRepo, embedder, settings, db } =
+      makeHarness();
     seedAgent('alpha');
     await service.create({
       project: PROJECT_PATH,
@@ -1007,7 +1171,10 @@ describe('KnowledgeService.vectorizeAll', () => {
       slug: 'one',
       content: 'body',
     });
-    embedder.embed.mockResolvedValue(new Array(512).fill(0.5));
+    settings.store.set('EMBEDDER_DIM', '512');
+    embedder.embedWithProfile.mockResolvedValue(
+      embedded(embedding(512, 0.5), { ...TEST_PROFILE, dim: 512 }),
+    );
     const result = await service.vectorizeAll({
       mode: 'all',
       targetDim: 512,
@@ -1043,11 +1210,11 @@ describe('KnowledgeService.vectorizeAll', () => {
         content: `body-${slug}`,
       });
     }
-    embedder.embed.mockReset();
-    embedder.embed
-      .mockResolvedValueOnce(new Array(768).fill(0.1))
+    embedder.embedWithProfile.mockReset();
+    embedder.embedWithProfile
+      .mockResolvedValueOnce(embedded())
       .mockRejectedValueOnce(new EmbedderError('upstream_failed', 'boom'))
-      .mockResolvedValueOnce(new Array(768).fill(0.1));
+      .mockResolvedValueOnce(embedded());
     const result = await service.vectorizeAll({ mode: 'all' });
     expect(result.processed).toBe(2);
     expect(result.errors).toBe(1);
@@ -1091,6 +1258,26 @@ describe('KnowledgeService.getVectorizeStatus', () => {
     const status = service.getVectorizeStatus();
     expect(status.currentDim).toBe(768);
     expect(status.totalVectors).toBe(1);
+    expect(status.stale).toBe(1);
+  });
+
+  it('reports old vectors as stale/needed when embedder URL changes', async () => {
+    const { service, seedAgent, settings } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'a',
+      content: 'body',
+    });
+    settings.store.set('EMBEDDER_URL', 'http://other/v1/embeddings');
+
+    const status = service.getVectorizeStatus();
+
+    expect(status.totalKnowledge).toBe(1);
+    expect(status.totalVectors).toBe(1);
+    expect(status.fresh).toBe(0);
+    expect(status.needed).toBe(1);
     expect(status.stale).toBe(1);
   });
 

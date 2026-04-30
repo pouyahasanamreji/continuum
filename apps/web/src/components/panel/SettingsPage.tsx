@@ -32,9 +32,19 @@ interface AppSettingsResponse {
 interface VectorizeStatus {
   totalKnowledge: number;
   totalVectors: number;
+  fresh: number;
   missing: number;
+  needed: number;
   stale: number;
   currentDim: number;
+  targetDim: number;
+  profile: {
+    url: string | null;
+    model: string;
+    dim: number;
+    configured: boolean;
+    signature: string | null;
+  };
 }
 
 interface VectorizeResult {
@@ -53,7 +63,7 @@ type FormShape = {
 };
 type Effective = AppSettingsResponse["effective"];
 
-type RegenSummary = "model" | "dim" | "both";
+type RegenSummary = "profile" | "dim" | "both";
 
 type State =
   | { kind: "loading" }
@@ -119,7 +129,7 @@ export function SettingsPage() {
           status,
           regen: {
             open: false,
-            summary: "model",
+            summary: "profile",
             targetDim: undefined,
             busy: false,
           },
@@ -169,21 +179,17 @@ export function SettingsPage() {
     );
   }
 
-  const { form, baseline, effective, saving, savedAt, status, regen, lastResult } =
-    state;
+  const { form, baseline, effective, saving, savedAt, status, regen, lastResult } = state;
   const dirty =
     form.anthropicApiKey !== baseline.anthropicApiKey ||
     form.anthropicTokenizerModel !== baseline.anthropicTokenizerModel ||
     form.embedderUrl !== baseline.embedderUrl ||
     form.embedderModel !== baseline.embedderModel ||
     form.embedderDim !== baseline.embedderDim;
-  const showSavedBadge =
-    savedAt !== null && Date.now() - savedAt < 3000 && savedTick >= 0;
+  const showSavedBadge = savedAt !== null && Date.now() - savedAt < 3000 && savedTick >= 0;
 
   const setForm = (patch: Partial<FormShape>) => {
-    setState((s) =>
-      s.kind === "ready" ? { ...s, form: { ...s.form, ...patch } } : s,
-    );
+    setState((s) => (s.kind === "ready" ? { ...s, form: { ...s.form, ...patch } } : s));
   };
 
   const refetchStatus = async () => {
@@ -193,7 +199,7 @@ export function SettingsPage() {
 
   const onBackfill = async () => {
     if (state.kind !== "ready" || !state.status) return;
-    const total = state.status.missing;
+    const total = state.status.needed;
     try {
       const result = await postJson<VectorizeResult>(VECTORIZE_ENDPOINT, {
         mode: "missing",
@@ -209,7 +215,7 @@ export function SettingsPage() {
                 errors: result.errors,
               },
             }
-          : s,
+          : s
       );
     } catch (err) {
       setState({
@@ -221,22 +227,17 @@ export function SettingsPage() {
 
   const closeRegen = () => {
     setState((s) =>
-      s.kind === "ready"
-        ? { ...s, regen: { ...s.regen, open: false, busy: false } }
-        : s,
+      s.kind === "ready" ? { ...s, regen: { ...s.regen, open: false, busy: false } } : s
     );
   };
 
   const onConfirmRegen = async () => {
     if (state.kind !== "ready") return;
     const total = state.status?.totalKnowledge ?? 0;
-    setState((s) =>
-      s.kind === "ready" ? { ...s, regen: { ...s.regen, busy: true } } : s,
-    );
+    setState((s) => (s.kind === "ready" ? { ...s, regen: { ...s.regen, busy: true } } : s));
     try {
       const body: { mode: "all"; targetDim?: number } = { mode: "all" };
-      if (state.regen.targetDim !== undefined)
-        body.targetDim = state.regen.targetDim;
+      if (state.regen.targetDim !== undefined) body.targetDim = state.regen.targetDim;
       const result = await postJson<VectorizeResult>(VECTORIZE_ENDPOINT, body);
       await refetchStatus();
       setState((s) =>
@@ -250,7 +251,7 @@ export function SettingsPage() {
                 errors: result.errors,
               },
             }
-          : s,
+          : s
       );
     } catch (err) {
       setState({
@@ -263,8 +264,7 @@ export function SettingsPage() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (state.kind !== "ready" || !dirty || saving) return;
-    const prevModel = baseline.embedderModel;
-    const prevDim = baseline.embedderDim;
+    const previousProfile = state.status?.profile ?? null;
     setState({ ...state, saving: true });
     const body: {
       anthropicApiKey?: string;
@@ -277,30 +277,27 @@ export function SettingsPage() {
       body.anthropicApiKey = form.anthropicApiKey;
     if (form.anthropicTokenizerModel !== baseline.anthropicTokenizerModel)
       body.anthropicTokenizerModel = form.anthropicTokenizerModel;
-    if (form.embedderUrl !== baseline.embedderUrl)
-      body.embedderUrl = form.embedderUrl;
-    if (form.embedderModel !== baseline.embedderModel)
-      body.embedderModel = form.embedderModel;
+    if (form.embedderUrl !== baseline.embedderUrl) body.embedderUrl = form.embedderUrl;
+    if (form.embedderModel !== baseline.embedderModel) body.embedderModel = form.embedderModel;
     if (form.embedderDim !== baseline.embedderDim) {
       const parsed = parseDim(form.embedderDim);
       if (parsed !== null) body.embedderDim = parsed;
     }
     try {
       const r = await patchJson<AppSettingsResponse>(SETTINGS_ENDPOINT, body);
+      const freshStatus = await getJson<VectorizeStatus>(STATUS_ENDPOINT);
       const newForm = toForm(r);
-      const modelChanged = newForm.embedderModel !== prevModel;
-      const dimChanged = newForm.embedderDim !== prevDim;
-      const totalKnowledge = state.status?.totalKnowledge ?? 0;
-      const shouldPrompt =
-        (modelChanged || dimChanged) && totalKnowledge > 0;
+      const nextProfile = freshStatus.profile;
+      const signatureChanged =
+        previousProfile !== null && previousProfile.signature !== nextProfile.signature;
+      const dimChanged = previousProfile !== null && previousProfile.dim !== nextProfile.dim;
+      const profileDetailsChanged =
+        previousProfile !== null &&
+        (previousProfile.url !== nextProfile.url || previousProfile.model !== nextProfile.model);
+      const shouldPrompt = signatureChanged && freshStatus.totalKnowledge > 0;
       const summary: RegenSummary =
-        dimChanged && modelChanged
-          ? "both"
-          : dimChanged
-            ? "dim"
-            : "model";
-      const targetDim =
-        dimChanged && r.embedderDim !== null ? r.embedderDim : undefined;
+        dimChanged && profileDetailsChanged ? "both" : dimChanged ? "dim" : "profile";
+      const targetDim = dimChanged ? freshStatus.targetDim : undefined;
       setState({
         kind: "ready",
         form: newForm,
@@ -308,7 +305,7 @@ export function SettingsPage() {
         effective: r.effective,
         saving: false,
         savedAt: Date.now(),
-        status: state.status,
+        status: freshStatus,
         regen: shouldPrompt
           ? { open: true, summary, targetDim, busy: false }
           : { open: false, summary, targetDim, busy: false },
@@ -334,16 +331,13 @@ export function SettingsPage() {
           <CardHeader>
             <CardTitle>Anthropic API</CardTitle>
             <CardDescription>
-              Used by the token-count badge on PLOT and Knowledge. Saved
-              unencrypted to the orchestrator SQLite database.
+              Used by the token-count badge on PLOT and Knowledge. Saved unencrypted to the
+              orchestrator SQLite database.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label
-                className="text-sm font-medium"
-                htmlFor="anthropic-api-key"
-              >
+              <label className="text-sm font-medium" htmlFor="anthropic-api-key">
                 API key
               </label>
               <Input
@@ -352,18 +346,16 @@ export function SettingsPage() {
                 onChange={(e) => setForm({ anthropicApiKey: e.target.value })}
                 placeholder="sk-ant-..."
               />
-              {effective.anthropicApiKey === "env" &&
-                form.anthropicApiKey === "" && (
-                  <p className="text-xs text-muted-foreground">
-                    Currently provided by environment variable.
-                  </p>
-                )}
-              {effective.anthropicApiKey === "unset" &&
-                form.anthropicApiKey === "" && (
-                  <p className="text-xs text-muted-foreground">
-                    Not set. Token-count requests will return 503.
-                  </p>
-                )}
+              {effective.anthropicApiKey === "env" && form.anthropicApiKey === "" && (
+                <p className="text-xs text-muted-foreground">
+                  Currently provided by environment variable.
+                </p>
+              )}
+              {effective.anthropicApiKey === "unset" && form.anthropicApiKey === "" && (
+                <p className="text-xs text-muted-foreground">
+                  Not set. Token-count requests will return 503.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="anthropic-model">
@@ -372,9 +364,7 @@ export function SettingsPage() {
               <Input
                 id="anthropic-model"
                 value={form.anthropicTokenizerModel}
-                onChange={(e) =>
-                  setForm({ anthropicTokenizerModel: e.target.value })
-                }
+                onChange={(e) => setForm({ anthropicTokenizerModel: e.target.value })}
                 placeholder="claude-opus-4-7"
               />
               {effective.anthropicTokenizerModel === "env" &&
@@ -396,16 +386,16 @@ export function SettingsPage() {
           <CardHeader>
             <CardTitle>Embedder</CardTitle>
             <CardDescription>
-              Used to vectorize knowledge content on create and update. Point
-              this at Ollama <code>/api/embed</code> or an OpenAI-compatible{" "}
-              <code>/v1/embeddings</code> endpoint such as TEI.
+              Used to vectorize knowledge content on create and update. Point this at Ollama{" "}
+              <code>/api/embed</code> or an OpenAI-compatible <code>/v1/embeddings</code> endpoint
+              such as TEI.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {status && status.stale > 0 ? (
               <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                {status.stale} vectors are at the wrong dimension. Click
-                Regenerate to re-embed.
+                {status.stale} vectors were created with an old embedder profile. Regenerate to
+                refresh search.
               </div>
             ) : null}
             <div className="space-y-2">
@@ -419,12 +409,9 @@ export function SettingsPage() {
                 placeholder="http://embedder:80/v1/embeddings"
               />
               <p className="text-xs text-muted-foreground">
-                Compose API to TEI:{" "}
-                <code>http://embedder:80/v1/embeddings</code>. Compose API to
-                host Ollama:{" "}
-                <code>http://host.docker.internal:11434/api/embed</code>. Local
-                API to TEI:{" "}
-                <code>http://127.0.0.1:8080/v1/embeddings</code>.
+                Compose API to TEI: <code>http://embedder:80/v1/embeddings</code>. Compose API to
+                host Ollama: <code>http://host.docker.internal:11434/api/embed</code>. Local API to
+                TEI: <code>http://127.0.0.1:8080/v1/embeddings</code>.
               </p>
               {effective.embedderUrl === "env" && form.embedderUrl === "" && (
                 <p className="text-xs text-muted-foreground">
@@ -448,22 +435,19 @@ export function SettingsPage() {
                 placeholder="google/embeddinggemma-300m"
               />
               <p className="text-xs text-muted-foreground">
-                TEI users should set{" "}
-                <code>google/embeddinggemma-300m</code>. Ollama users can leave
+                TEI users should set <code>google/embeddinggemma-300m</code>. Ollama users can leave
                 this empty for the app default.
               </p>
-              {effective.embedderModel === "env" &&
-                form.embedderModel === "" && (
-                  <p className="text-xs text-muted-foreground">
-                    Currently provided by environment variable.
-                  </p>
-                )}
-              {effective.embedderModel === "default" &&
-                form.embedderModel === "" && (
-                  <p className="text-xs text-muted-foreground">
-                    Defaults to <code>embeddinggemma</code>.
-                  </p>
-                )}
+              {effective.embedderModel === "env" && form.embedderModel === "" && (
+                <p className="text-xs text-muted-foreground">
+                  Currently provided by environment variable.
+                </p>
+              )}
+              {effective.embedderModel === "default" && form.embedderModel === "" && (
+                <p className="text-xs text-muted-foreground">
+                  Defaults to <code>embeddinggemma</code>.
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor="embedder-dim">
@@ -479,31 +463,22 @@ export function SettingsPage() {
               {effective.embedderDim === "env" && form.embedderDim === "" && (
                 <p className="text-xs text-muted-foreground">From env.</p>
               )}
-              {effective.embedderDim === "default" &&
-                form.embedderDim === "" && (
-                  <p className="text-xs text-muted-foreground">
-                    Defaults to 768.
-                  </p>
-                )}
+              {effective.embedderDim === "default" && form.embedderDim === "" && (
+                <p className="text-xs text-muted-foreground">Defaults to 768.</p>
+              )}
             </div>
             {status ? (
               <p className="text-xs text-muted-foreground">
-                {status.totalVectors} / {status.totalKnowledge} vectorized ·
-                current dim {status.currentDim}
+                {status.fresh} / {status.totalKnowledge} fresh vectors · current dim{" "}
+                {status.currentDim} · target dim {status.targetDim}
               </p>
             ) : null}
-            {status && status.missing > 0 ? (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => void onBackfill()}
-              >
-                Backfill missing vectors ({status.missing})
+            {status && status.needed > 0 ? (
+              <Button type="button" variant="secondary" onClick={() => void onBackfill()}>
+                Backfill needed vectors ({status.needed})
               </Button>
             ) : null}
-            {lastResultBadge ? (
-              <Badge variant="secondary">{lastResultBadge}</Badge>
-            ) : null}
+            {lastResultBadge ? <Badge variant="secondary">{lastResultBadge}</Badge> : null}
           </CardContent>
           <CardFooter className="flex items-center gap-2">
             <Button type="submit" disabled={!dirty || saving}>

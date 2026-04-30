@@ -67,8 +67,15 @@ export abstract class KnowledgeRepository {
     queryEmbedding: number[],
     kind: KnowledgeKindEnum | undefined,
     limit: number,
+    signature: string,
   ): Knowledge[];
   abstract findAllForVectorize(
     mode: 'missing' | 'all',
+    signature?: string,
   ): Array<{ id: number; content: string }>;
+  abstract countFreshForSearch(
+    projectId: number,
+    kind: KnowledgeKindEnum | undefined,
+    signature: string,
+  ): number;
 }

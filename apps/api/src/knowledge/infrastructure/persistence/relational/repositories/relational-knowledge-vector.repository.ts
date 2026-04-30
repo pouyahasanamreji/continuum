@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { OrchestratorDbService } from '../../../../../database/orchestrator-db.service';
-import { KnowledgeVectorRepository } from '../../knowledge-vector.repository';
+import {
+  KnowledgeVectorMetadata,
+  KnowledgeVectorRepository,
+} from '../../knowledge-vector.repository';
 
 @Injectable()
 export class RelationalKnowledgeVectorRepository extends KnowledgeVectorRepository {
@@ -10,11 +13,20 @@ export class RelationalKnowledgeVectorRepository extends KnowledgeVectorReposito
     super();
   }
 
-  upsert(knowledgeId: number, embedding: number[]): void {
+  upsert(
+    knowledgeId: number,
+    embedding: number[],
+    metadata: KnowledgeVectorMetadata,
+  ): void {
     const expected = this.dim();
     if (embedding.length !== expected) {
       throw new Error(
         `knowledge_vec: dim mismatch (got ${embedding.length}, expected ${expected})`,
+      );
+    }
+    if (metadata.dim !== embedding.length) {
+      throw new Error(
+        `knowledge_vec: metadata dim mismatch (got ${metadata.dim}, embedding ${embedding.length})`,
       );
     }
     const buf = Buffer.from(new Float32Array(embedding).buffer);
@@ -24,18 +36,43 @@ export class RelationalKnowledgeVectorRepository extends KnowledgeVectorReposito
         .prepare('DELETE FROM knowledge_vec WHERE knowledge_id = ?')
         .run(id);
       this.dbs.db
+        .prepare('DELETE FROM knowledge_vec_meta WHERE knowledge_id = ?')
+        .run(knowledgeId);
+      this.dbs.db
         .prepare(
-          `INSERT INTO knowledge_vec (knowledge_id, embedding) VALUES (?, ?)`,
+          `INSERT INTO knowledge_vec (knowledge_id, embedding, embedder_signature)
+           VALUES (?, ?, ?)`,
         )
-        .run(id, buf);
+        .run(id, buf, metadata.signature);
+      this.dbs.db
+        .prepare(
+          `INSERT INTO knowledge_vec_meta (
+             knowledge_id, embedder_model, embedder_dim, embedder_url,
+             embedder_signature, embedded_at
+           ) VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          knowledgeId,
+          metadata.model,
+          metadata.dim,
+          metadata.url,
+          metadata.signature,
+          metadata.embeddedAt,
+        );
     });
     tx();
   }
 
   remove(knowledgeId: number): void {
-    this.dbs.db
-      .prepare('DELETE FROM knowledge_vec WHERE knowledge_id = ?')
-      .run(BigInt(knowledgeId));
+    const tx = this.dbs.db.transaction(() => {
+      this.dbs.db
+        .prepare('DELETE FROM knowledge_vec WHERE knowledge_id = ?')
+        .run(BigInt(knowledgeId));
+      this.dbs.db
+        .prepare('DELETE FROM knowledge_vec_meta WHERE knowledge_id = ?')
+        .run(knowledgeId);
+    });
+    tx();
   }
 
   countRows(): number {
@@ -45,13 +82,24 @@ export class RelationalKnowledgeVectorRepository extends KnowledgeVectorReposito
     return row.c;
   }
 
+  countRowsBySignature(signature: string): number {
+    const row = this.dbs.db
+      .prepare(
+        `SELECT COUNT(*) AS c FROM knowledge_vec WHERE embedder_signature = ?`,
+      )
+      .get(signature) as { c: number };
+    return row.c;
+  }
+
   currentDim(): number {
     return this.dim();
   }
 
   deleteAllRows(): void {
     // Trigger watches knowledge, NOT knowledge_vec — does not fire here.
-    this.dbs.db.exec(`DELETE FROM knowledge_vec;`);
+    this.dbs.db.exec(
+      `DELETE FROM knowledge_vec; DELETE FROM knowledge_vec_meta;`,
+    );
   }
 
   /**
@@ -65,8 +113,9 @@ export class RelationalKnowledgeVectorRepository extends KnowledgeVectorReposito
     }
     this.dbs.db.exec(`DROP TRIGGER IF EXISTS knowledge_vec_cleanup;`);
     this.dbs.db.exec(`DROP TABLE IF EXISTS knowledge_vec;`);
+    this.dbs.db.exec(`DELETE FROM knowledge_vec_meta;`);
     this.dbs.db.exec(
-      `CREATE VIRTUAL TABLE knowledge_vec USING vec0(knowledge_id INTEGER PRIMARY KEY, embedding FLOAT[${newDim}]);`,
+      `CREATE VIRTUAL TABLE knowledge_vec USING vec0(knowledge_id INTEGER PRIMARY KEY, embedding FLOAT[${newDim}], embedder_signature TEXT);`,
     );
     this.dbs.db.exec(
       `CREATE TRIGGER knowledge_vec_cleanup AFTER DELETE ON knowledge BEGIN DELETE FROM knowledge_vec WHERE knowledge_id = OLD.id; END;`,

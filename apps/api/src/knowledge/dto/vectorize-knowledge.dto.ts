@@ -26,10 +26,22 @@ export class VectorizeKnowledgeResultDto {
   @ApiProperty() durationMs!: number;
 }
 
+export class VectorizeProfileDto {
+  @ApiPropertyOptional({ nullable: true }) url!: string | null;
+  @ApiProperty() model!: string;
+  @ApiProperty() dim!: number;
+  @ApiProperty() configured!: boolean;
+  @ApiPropertyOptional({ nullable: true }) signature!: string | null;
+}
+
 export class VectorizeStatusDto {
   @ApiProperty() totalKnowledge!: number;
   @ApiProperty() totalVectors!: number;
+  @ApiProperty() fresh!: number;
   @ApiProperty() missing!: number;
+  @ApiProperty() needed!: number;
   @ApiProperty() stale!: number;
   @ApiProperty() currentDim!: number;
+  @ApiProperty() targetDim!: number;
+  @ApiProperty({ type: VectorizeProfileDto }) profile!: VectorizeProfileDto;
 }

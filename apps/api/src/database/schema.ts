@@ -3,7 +3,7 @@
 // synthesise.
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION: number = 9;
+export const SCHEMA_VERSION: number = 10;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -79,9 +79,21 @@ CREATE TABLE IF NOT EXISTS app_settings (
   updated_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS knowledge_vec_meta (
+  knowledge_id INTEGER PRIMARY KEY REFERENCES knowledge(id) ON DELETE CASCADE,
+  embedder_model TEXT NOT NULL,
+  embedder_dim INTEGER NOT NULL CHECK (embedder_dim BETWEEN 1 AND 4096),
+  embedder_url TEXT NOT NULL,
+  embedder_signature TEXT NOT NULL,
+  embedded_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_vec_meta_signature
+  ON knowledge_vec_meta(embedder_signature);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vec USING vec0(
   knowledge_id INTEGER PRIMARY KEY,
-  embedding FLOAT[768]
+  embedding FLOAT[768],
+  embedder_signature TEXT
 );
 
 CREATE TRIGGER IF NOT EXISTS knowledge_vec_cleanup
@@ -94,6 +106,7 @@ END;
 const DROP_LEGACY_SQL = `
 DROP TABLE IF EXISTS agents;
 DROP TABLE IF EXISTS knowledge_vec;
+DROP TABLE IF EXISTS knowledge_vec_meta;
 DROP TABLE IF EXISTS knowledge;
 DROP TABLE IF EXISTS plot_history;
 DROP TABLE IF EXISTS plots;
@@ -174,6 +187,41 @@ export function migrate(db: Database.Database): void {
         db.pragma(`user_version = ${SCHEMA_VERSION}`);
       });
       tx.immediate();
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+    return;
+  }
+
+  if (current === 9 && SCHEMA_VERSION === 10) {
+    db.pragma('foreign_keys = OFF');
+    try {
+      db.exec(`DROP TRIGGER IF EXISTS knowledge_vec_cleanup;`);
+      db.exec(`DROP TABLE IF EXISTS knowledge_vec;`);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS knowledge_vec_meta (
+          knowledge_id INTEGER PRIMARY KEY REFERENCES knowledge(id) ON DELETE CASCADE,
+          embedder_model TEXT NOT NULL,
+          embedder_dim INTEGER NOT NULL CHECK (embedder_dim BETWEEN 1 AND 4096),
+          embedder_url TEXT NOT NULL,
+          embedder_signature TEXT NOT NULL,
+          embedded_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_knowledge_vec_meta_signature
+          ON knowledge_vec_meta(embedder_signature);
+        DELETE FROM knowledge_vec_meta;
+        CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vec USING vec0(
+          knowledge_id INTEGER PRIMARY KEY,
+          embedding FLOAT[768],
+          embedder_signature TEXT
+        );
+        CREATE TRIGGER IF NOT EXISTS knowledge_vec_cleanup
+        AFTER DELETE ON knowledge
+        BEGIN
+          DELETE FROM knowledge_vec WHERE knowledge_id = OLD.id;
+        END;
+      `);
+      db.pragma(`user_version = ${SCHEMA_VERSION}`);
     } finally {
       db.pragma('foreign_keys = ON');
     }

@@ -52,7 +52,11 @@ For TEI, set `EMBEDDER_MODEL=google/embeddinggemma-300m` and
 `EMBEDDER_DIM=768`. For Ollama, the API default model remains `embeddinggemma`
 and the endpoint style remains `/api/embed`. Panel settings stored in SQLite
 override env vars, so clear or update stale settings when changing embedder
-configuration. Regenerate knowledge vectors after changing model or dimension.
+configuration. Knowledge vectors are tied to the effective embedder URL, model,
+and dimension profile; changing any of those values marks existing vectors stale.
+Regenerate or backfill vectors after profile changes. The v10 schema migration
+invalidates old v9 vector caches because their embedder metadata cannot be
+reconstructed.
 
 ## Repo layout
 
@@ -177,7 +181,7 @@ pnpm -F @continuum/api check-types  # tsc --noEmit
 | `ANTHROPIC_TOKENIZER_MODEL` | `claude-opus-4-7` | Model passed to Anthropic `count_tokens`. |
 | `EMBEDDER_URL` | _unset_ | Embedding endpoint. Supports Ollama `/api/embed` and OpenAI-compatible `/v1/embeddings` such as TEI. |
 | `EMBEDDER_MODEL` | `embeddinggemma` | Model sent to the embedder. Use `google/embeddinggemma-300m` for TEI. |
-| `EMBEDDER_DIM` | `768` | Expected embedding dimension used to detect stale vectors. |
+| `EMBEDDER_DIM` | `768` | Expected embedding dimension. This is part of the vector freshness profile with embedder URL and model. |
 
 ## Web — `apps/web` (`@continuum/web`)
 

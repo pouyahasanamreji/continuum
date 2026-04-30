@@ -11,24 +11,21 @@ import {
 
 interface Props {
   open: boolean;
-  summary: "model" | "dim" | "both";
+  summary: "profile" | "dim" | "both";
   totalKnowledge: number;
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-function describe(
-  summary: Props["summary"],
-  totalKnowledge: number,
-): string {
-  if (summary === "model") {
-    return `You changed the embedder model. Re-embed all ${totalKnowledge} knowledge rows with the new model?`;
+function describe(summary: Props["summary"], totalKnowledge: number): string {
+  if (summary === "profile") {
+    return `You changed the embedder profile. Re-embed all ${totalKnowledge} knowledge rows with the new profile?`;
   }
   if (summary === "dim") {
     return `You changed the embedding dimension. Drop the vector table and re-embed all ${totalKnowledge} knowledge rows at the new dim?`;
   }
-  return `You changed the embedder model and dimension. Drop the vector table and re-embed all ${totalKnowledge} knowledge rows?`;
+  return `You changed the embedder profile and dimension. Drop the vector table and re-embed all ${totalKnowledge} knowledge rows?`;
 }
 
 export function RegenerateVectorsAlert({
@@ -49,9 +46,7 @@ export function RegenerateVectorsAlert({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Regenerate all vectors?</AlertDialogTitle>
-          <AlertDialogDescription>
-            {describe(summary, totalKnowledge)}
-          </AlertDialogDescription>
+          <AlertDialogDescription>{describe(summary, totalKnowledge)}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>

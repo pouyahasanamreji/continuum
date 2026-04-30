@@ -20,6 +20,11 @@ import {
   VectorizeKnowledgeResultDto,
   VectorizeStatusDto,
 } from './dto/vectorize-knowledge.dto';
+import {
+  EmbeddedVector,
+  makeEmbedderSignature,
+} from '../embedder/embedder-profile';
+import { KnowledgeVectorMetadata } from './infrastructure/persistence/knowledge-vector.repository';
 
 const SEARCH_DEFAULT_LIMIT = 10;
 const SEARCH_MAX_LIMIT = 50;
@@ -155,8 +160,12 @@ export class KnowledgeService {
 
   private async vectorize(knowledgeId: number, content: string): Promise<void> {
     try {
-      const vec = await this.embedder.embed(content);
-      this.vecRepo.upsert(knowledgeId, vec);
+      const embedded = await this.embedder.embedWithProfile(content);
+      this.vecRepo.upsert(
+        knowledgeId,
+        embedded.embedding,
+        this.vectorMetadata(embedded),
+      );
     } catch (err) {
       const reason = err instanceof EmbedderError ? err.reason : 'unknown';
       this.logger.warn(
@@ -171,12 +180,16 @@ export class KnowledgeService {
     targetDim?: number;
   }): Promise<VectorizeKnowledgeResultDto> {
     const start = Date.now();
+    const profile = this.settings.resolveEmbedderProfile();
     if (opts.mode === 'all') {
       if (opts.targetDim !== undefined)
         this.vecRepo.recreateTable(opts.targetDim);
       else this.vecRepo.deleteAllRows();
     }
-    const rows = this.repo.findAllForVectorize(opts.mode);
+    const rows = this.repo.findAllForVectorize(
+      opts.mode,
+      profile.signature ?? undefined,
+    );
     let processed = 0;
     let skipped = 0;
     let errors = 0;
@@ -186,8 +199,12 @@ export class KnowledgeService {
         continue;
       }
       try {
-        const vec = await this.embedder.embed(row.content);
-        this.vecRepo.upsert(row.id, vec);
+        const embedded = await this.embedder.embedWithProfile(row.content);
+        this.vecRepo.upsert(
+          row.id,
+          embedded.embedding,
+          this.vectorMetadata(embedded),
+        );
         processed++;
       } catch (err) {
         errors++;
@@ -204,12 +221,24 @@ export class KnowledgeService {
   getVectorizeStatus(): VectorizeStatusDto {
     const totalKnowledge = this.repo.findAllForVectorize('all').length;
     const totalVectors = this.vecRepo.countRows();
-    const missing = this.repo.findAllForVectorize('missing').length;
     const currentDim = this.vecRepo.currentDim();
-    const settingDim = this.settings.readAllForPanel().embedderDim ?? 0;
-    const stale =
-      settingDim !== 0 && settingDim !== currentDim ? totalVectors : 0;
-    return { totalKnowledge, totalVectors, missing, stale, currentDim };
+    const profile = this.settings.resolveEmbedderProfile();
+    const fresh = profile.signature
+      ? this.vecRepo.countRowsBySignature(profile.signature)
+      : 0;
+    const needed = Math.max(0, totalKnowledge - fresh);
+    const stale = Math.max(0, totalVectors - fresh);
+    return {
+      totalKnowledge,
+      totalVectors,
+      fresh,
+      missing: needed,
+      needed,
+      stale,
+      currentDim,
+      targetDim: profile.dim,
+      profile,
+    };
   }
 
   async search(
@@ -234,9 +263,9 @@ export class KnowledgeService {
         effectiveLimit,
       );
     }
-    let queryVec: number[] | null = null;
+    let queryVec: EmbeddedVector | null = null;
     try {
-      queryVec = await this.embedder.embed(query);
+      queryVec = await this.embedder.embedWithProfile(query);
     } catch (err) {
       const reason = err instanceof EmbedderError ? err.reason : 'unknown';
       this.logger.warn(
@@ -244,12 +273,23 @@ export class KnowledgeService {
       );
     }
     if (queryVec !== null) {
+      const signature = makeEmbedderSignature(queryVec.profile);
+      const fresh = this.repo.countFreshForSearch(projectId, kind, signature);
+      if (fresh === 0) {
+        return this.repo.searchByContent(
+          projectId,
+          query,
+          kind,
+          effectiveLimit,
+        );
+      }
       try {
         return this.repo.searchByVector(
           projectId,
-          queryVec,
+          queryVec.embedding,
           kind,
           effectiveLimit,
+          signature,
         );
       } catch (err) {
         this.logger.warn(
@@ -259,5 +299,15 @@ export class KnowledgeService {
       }
     }
     return this.repo.searchByContent(projectId, query, kind, effectiveLimit);
+  }
+
+  private vectorMetadata(embedded: EmbeddedVector): KnowledgeVectorMetadata {
+    return {
+      model: embedded.profile.model,
+      dim: embedded.profile.dim,
+      url: embedded.profile.url,
+      signature: makeEmbedderSignature(embedded.profile),
+      embeddedAt: Date.now(),
+    };
   }
 }

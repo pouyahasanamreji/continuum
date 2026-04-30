@@ -38,6 +38,7 @@ describe('migrate idempotency', () => {
       'knowledge',
       'agents',
       'app_settings',
+      'knowledge_vec_meta',
     ]) {
       expect(
         (db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get() as { c: number }).c,
@@ -87,8 +88,8 @@ describe('migrate idempotency', () => {
   });
 });
 
-describe('migrate v8 → v9 incremental', () => {
-  it('adds knowledge_vec virtual table + cleanup trigger; preserves rows', () => {
+describe('migrate v9 → v10 incremental', () => {
+  it('adds vector metadata, recreates knowledge_vec, preserves canonical rows', () => {
     const db = new Database(':memory:');
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
@@ -138,8 +139,22 @@ describe('migrate v8 → v9 incremental', () => {
         deleted_at INTEGER NULL,
         UNIQUE(project_id, slug)
       );
+      CREATE TABLE app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE VIRTUAL TABLE knowledge_vec USING vec0(
+        knowledge_id INTEGER PRIMARY KEY,
+        embedding FLOAT[768]
+      );
+      CREATE TRIGGER knowledge_vec_cleanup
+      AFTER DELETE ON knowledge
+      BEGIN
+        DELETE FROM knowledge_vec WHERE knowledge_id = OLD.id;
+      END;
     `);
-    db.pragma('user_version = 8');
+    db.pragma('user_version = 9');
 
     const now = Date.now();
     const projInfo = db
@@ -162,10 +177,17 @@ describe('migrate v8 → v9 incremental', () => {
       )
       .run(projectId, agentId, 'one', 'body', now, now);
     const knowledgeId = Number(kInfo.lastInsertRowid);
+    db.prepare(
+      `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)`,
+    ).run('EMBEDDER_MODEL', 'old-model', now);
+    const oldBuf = Buffer.from(new Float32Array(768).fill(0.1).buffer);
+    db.prepare(
+      `INSERT INTO knowledge_vec (knowledge_id, embedding) VALUES (?, ?)`,
+    ).run(BigInt(knowledgeId), oldBuf);
 
     migrate(db);
 
-    expect(db.pragma('user_version', { simple: true })).toBe(9);
+    expect(db.pragma('user_version', { simple: true })).toBe(10);
     const vec = db
       .prepare<
         unknown[],
@@ -181,11 +203,39 @@ describe('migrate v8 → v9 incremental', () => {
       >('SELECT content FROM knowledge WHERE slug = ?')
       .get('one');
     expect(preserved?.content).toBe('body');
+    const setting = db
+      .prepare<
+        [string],
+        { value: string }
+      >('SELECT value FROM app_settings WHERE key = ?')
+      .get('EMBEDDER_MODEL');
+    expect(setting?.value).toBe('old-model');
+
+    const meta = db
+      .prepare<
+        unknown[],
+        { name: string }
+      >("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_vec_meta'")
+      .get();
+    expect(meta?.name).toBe('knowledge_vec_meta');
+    const metaCount = (
+      db.prepare('SELECT count(*) AS c FROM knowledge_vec_meta').get() as {
+        c: number;
+      }
+    ).c;
+    expect(metaCount).toBe(0);
+    const oldVecCount = (
+      db.prepare('SELECT count(*) AS c FROM knowledge_vec').get() as {
+        c: number;
+      }
+    ).c;
+    expect(oldVecCount).toBe(0);
 
     const buf = Buffer.from(new Float32Array(768).fill(0.1).buffer);
     db.prepare(
-      `INSERT INTO knowledge_vec (knowledge_id, embedding) VALUES (?, ?)`,
-    ).run(BigInt(knowledgeId), buf);
+      `INSERT INTO knowledge_vec (knowledge_id, embedding, embedder_signature)
+       VALUES (?, ?, ?)`,
+    ).run(BigInt(knowledgeId), buf, 'sig-v10');
     const vecCount = () => {
       const row = db
         .prepare('SELECT count(*) AS c FROM knowledge_vec')
@@ -193,6 +243,14 @@ describe('migrate v8 → v9 incremental', () => {
       return row.c;
     };
     expect(vecCount()).toBe(1);
+    const signature = (
+      db
+        .prepare(
+          `SELECT embedder_signature FROM knowledge_vec WHERE knowledge_id = ?`,
+        )
+        .get(BigInt(knowledgeId)) as { embedder_signature: string }
+    ).embedder_signature;
+    expect(signature).toBe('sig-v10');
 
     db.prepare('DELETE FROM knowledge WHERE id = ?').run(knowledgeId);
     expect(vecCount()).toBe(0);

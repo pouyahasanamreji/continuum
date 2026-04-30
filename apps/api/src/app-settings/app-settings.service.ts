@@ -8,6 +8,12 @@ import {
   WhitelistedSettingKey,
 } from './app-settings.keys';
 import { AppSettingsRepository } from './infrastructure/persistence/app-settings.repository';
+import {
+  DEFAULT_EMBEDDER_DIM,
+  DEFAULT_EMBEDDER_MODEL,
+  makeEmbedderSignature,
+  ResolvedEmbedderProfile,
+} from '../embedder/embedder-profile';
 
 @Injectable()
 export class AppSettingsService {
@@ -17,6 +23,30 @@ export class AppSettingsService {
     const fromDb = this.repo.getValue(key);
     if (fromDb !== null && fromDb !== '') return fromDb;
     return process.env[key] ?? null;
+  }
+
+  resolveEmbedderProfile(): ResolvedEmbedderProfile {
+    const url = this.resolve(SETTING_EMBEDDER_URL);
+    const model =
+      this.resolve(SETTING_EMBEDDER_MODEL) ?? DEFAULT_EMBEDDER_MODEL;
+    const dim =
+      this.parseDim(this.resolve(SETTING_EMBEDDER_DIM)) ?? DEFAULT_EMBEDDER_DIM;
+    if (!url) {
+      return {
+        url: null,
+        model,
+        dim,
+        configured: false,
+        signature: null,
+      };
+    }
+    return {
+      url,
+      model,
+      dim,
+      configured: true,
+      signature: makeEmbedderSignature({ url, model, dim }),
+    };
   }
 
   readAllForPanel() {

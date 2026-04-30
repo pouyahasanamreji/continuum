@@ -226,4 +226,102 @@ describe('AppSettingsService', () => {
     expect(result.effective.embedderDim).toBe('default');
     expect(result.embedderDim).toBeNull();
   });
+
+  it('resolveEmbedderProfile resolves DB > env > defaults', () => {
+    getValue.mockImplementation((k: string) => {
+      if (k === SETTING_EMBEDDER_URL) return 'http://db/v1/embeddings';
+      if (k === SETTING_EMBEDDER_MODEL) return 'db-model';
+      if (k === SETTING_EMBEDDER_DIM) return '512';
+      return null;
+    });
+    process.env.EMBEDDER_URL = 'http://env/v1/embeddings';
+    process.env.EMBEDDER_MODEL = 'env-model';
+    process.env.EMBEDDER_DIM = '1024';
+
+    expect(service.resolveEmbedderProfile()).toMatchObject({
+      url: 'http://db/v1/embeddings',
+      model: 'db-model',
+      dim: 512,
+      configured: true,
+    });
+  });
+
+  it('resolveEmbedderProfile treats empty DB values as env/default fallback', () => {
+    getValue.mockImplementation((k: string) => {
+      if (
+        k === SETTING_EMBEDDER_URL ||
+        k === SETTING_EMBEDDER_MODEL ||
+        k === SETTING_EMBEDDER_DIM
+      )
+        return '';
+      return null;
+    });
+    process.env.EMBEDDER_URL = 'http://env/v1/embeddings';
+
+    expect(service.resolveEmbedderProfile()).toMatchObject({
+      url: 'http://env/v1/embeddings',
+      model: 'embeddinggemma',
+      dim: 768,
+      configured: true,
+    });
+  });
+
+  it('resolveEmbedderProfile falls back to 768 for invalid dim', () => {
+    getValue.mockImplementation((k: string) => {
+      if (k === SETTING_EMBEDDER_URL) return 'http://db/v1/embeddings';
+      if (k === SETTING_EMBEDDER_DIM) return 'not-a-number';
+      return null;
+    });
+
+    expect(service.resolveEmbedderProfile()).toMatchObject({
+      dim: 768,
+      configured: true,
+    });
+  });
+
+  it('resolveEmbedderProfile changes signature when same-dim model changes', () => {
+    getValue.mockImplementation((k: string) => {
+      if (k === SETTING_EMBEDDER_URL) return 'http://db/v1/embeddings';
+      if (k === SETTING_EMBEDDER_MODEL) return 'model-a';
+      if (k === SETTING_EMBEDDER_DIM) return '768';
+      return null;
+    });
+    const first = service.resolveEmbedderProfile().signature;
+    getValue.mockImplementation((k: string) => {
+      if (k === SETTING_EMBEDDER_URL) return 'http://db/v1/embeddings';
+      if (k === SETTING_EMBEDDER_MODEL) return 'model-b';
+      if (k === SETTING_EMBEDDER_DIM) return '768';
+      return null;
+    });
+
+    expect(service.resolveEmbedderProfile().signature).not.toBe(first);
+  });
+
+  it('resolveEmbedderProfile changes signature when URL changes', () => {
+    getValue.mockImplementation((k: string) => {
+      if (k === SETTING_EMBEDDER_URL) return 'http://db-a/v1/embeddings';
+      if (k === SETTING_EMBEDDER_MODEL) return 'model-a';
+      return null;
+    });
+    const first = service.resolveEmbedderProfile().signature;
+    getValue.mockImplementation((k: string) => {
+      if (k === SETTING_EMBEDDER_URL) return 'http://db-b/v1/embeddings';
+      if (k === SETTING_EMBEDDER_MODEL) return 'model-a';
+      return null;
+    });
+
+    expect(service.resolveEmbedderProfile().signature).not.toBe(first);
+  });
+
+  it('resolveEmbedderProfile reports no URL as unconfigured with null signature', () => {
+    getValue.mockReturnValue(null);
+
+    expect(service.resolveEmbedderProfile()).toEqual({
+      url: null,
+      model: 'embeddinggemma',
+      dim: 768,
+      configured: false,
+      signature: null,
+    });
+  });
 });
