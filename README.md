@@ -34,6 +34,26 @@ This boots both apps via Turborepo:
 
 In dev, the API stores SQLite at `./.local-data/orchestrator.db` (set by `apps/api`'s `mcp:dev` script and the default `pnpm dev` flow). Without `ORCHESTRATOR_DB_PATH` it falls back to `/data/orchestrator.db`, which is the production container path.
 
+### Optional dev embedder
+
+The wrapper dev compose file can run Hugging Face Text Embeddings Inference
+(TEI) for `google/embeddinggemma-300m`:
+
+```bash
+HF_TOKEN=... docker compose -f /Users/h.amreji/Pers/continuum/docker-compose.dev.yml --profile embedder up embedder
+```
+
+`google/embeddinggemma-300m` is gated on Hugging Face. Accept the model license
+there first, then pass `HF_TOKEN`. TEI is exposed to host/local API processes at
+`http://127.0.0.1:8080/v1/embeddings`; from the compose API container use
+`http://embedder:80/v1/embeddings`.
+
+For TEI, set `EMBEDDER_MODEL=google/embeddinggemma-300m` and
+`EMBEDDER_DIM=768`. For Ollama, the API default model remains `embeddinggemma`
+and the endpoint style remains `/api/embed`. Panel settings stored in SQLite
+override env vars, so clear or update stale settings when changing embedder
+configuration. Regenerate knowledge vectors after changing model or dimension.
+
 ## Repo layout
 
 ```text
@@ -155,6 +175,9 @@ pnpm -F @continuum/api check-types  # tsc --noEmit
 | `ORCHESTRATOR_ALLOW_DESTRUCTIVE_MIGRATE` | _unset_ | Set to `1` to opt in to destructive migrations in production |
 | `ANTHROPIC_API_KEY` | _unset_ | Required for `/api/orchestrator/{plot,knowledge}/token-count`. Server-side only. |
 | `ANTHROPIC_TOKENIZER_MODEL` | `claude-opus-4-7` | Model passed to Anthropic `count_tokens`. |
+| `EMBEDDER_URL` | _unset_ | Embedding endpoint. Supports Ollama `/api/embed` and OpenAI-compatible `/v1/embeddings` such as TEI. |
+| `EMBEDDER_MODEL` | `embeddinggemma` | Model sent to the embedder. Use `google/embeddinggemma-300m` for TEI. |
+| `EMBEDDER_DIM` | `768` | Expected embedding dimension used to detect stale vectors. |
 
 ## Web — `apps/web` (`@continuum/web`)
 
