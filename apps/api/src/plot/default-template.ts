@@ -26,10 +26,13 @@ path — or the service throws \`project_not_found\`.
 
 This document is project-agnostic. Project-specific facts (base
 branch name, worktree-naming convention, shared-file names,
-reference modules) live as knowledge lessons. Enumerate via
-\`knowledge_list({project})\`, load every binding rule via
-\`knowledge_search({project, kind: 'fundamental'})\`, and pull
-topical situational lessons via \`knowledge_search({project, q})\`.
+reference modules) live as knowledge lessons. Treat
+\`knowledge_search\` as RAG-style semantic retrieval: \`q\` is
+free-text intent, not SQL pattern syntax, and may be a full
+natural-language question, task statement, or detailed description.
+Load fundamentals with
+\`knowledge_search({project, kind: 'fundamental'})\`. Use \`q\` for
+topical relevance, optionally with \`kind: 'situational'\`.
 
 ## Workflow
 
@@ -49,9 +52,11 @@ Every human-given task runs through four phases.
   every fundamental lesson for this project. These are binding
   rules that apply to every dispatch — read in full before any
   other phase-1 work.
-- Call \`knowledge_search({project, q})\` with topical keywords drawn
-  from the human task. Each hit is a situational lesson likely
-  relevant to the new work. Read every hit before Phase 2.
+- Call \`knowledge_search({project, q})\` with a natural-language
+  RAG query drawn from the human task: include relevant modules,
+  files, errors, concepts, and intent. Do not use SQL wildcard syntax.
+  Each hit is a situational lesson likely relevant to the new work.
+  Read every hit before Phase 2.
 - If no agents are active, say so explicitly.
 - Ask clarifying questions **only** when a conflict cannot be
   resolved without human input. Otherwise proceed.
@@ -189,6 +194,11 @@ service. There are no \`.orchestrator/\` files to read or write.
 | Edit a lesson | \`knowledge_update({project, slug, content?, agentSlug?, kind?})\` |
 | Retire a lesson | \`knowledge_delete({project, slug})\` |
 
+\`knowledge_search\` \`q\` is a RAG-style semantic query. Normal prose,
+full questions, task statements, and detailed descriptions are valid.
+At least one of \`q\` or \`kind\` is required; \`kind\` may be supplied
+alone or with \`q\`. Do not use SQL wildcard syntax.
+
 \`plot_update\` applies unified-diff patches with **zero fuzz**.
 Diff headers are validated by exact regex — both header lines
 must appear on their own line, case-sensitive, with at least one
@@ -224,9 +234,10 @@ Before planning any new dispatch, the orchestrator calls:
    lesson (slug + agentSlug + kind + timestamps).
 4. \`knowledge_search({project, kind: 'fundamental'})\` — load every
    fundamental lesson. Binding rules; read in full.
-5. \`knowledge_search({project, q})\` for each topical keyword from
-   the human task. Surface every matching situational lesson
-   before planning research.
+5. \`knowledge_search({project, q})\` with one or more RAG-style
+   free-text queries from the human task. \`q\` can be a full
+   natural-language question, task statement, or detailed description.
+   Surface every matching situational lesson before planning research.
 
 No dispatch without a fresh reading.
 
