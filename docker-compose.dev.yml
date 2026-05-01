@@ -1,0 +1,116 @@
+name: continuum-dev
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    image: continuum-api:dev-watch
+    container_name: continuum-api-dev
+    init: true
+    ports:
+      - "127.0.0.1:7776:7776"
+    environment:
+      NODE_ENV: development
+      PORT: "7776"
+      CORS_ORIGIN: "http://localhost:7777,http://127.0.0.1:7777"
+      ORCHESTRATOR_DB_PATH: /repo/.local-data/dev-orchestrator.db
+      PANEL_REST_ENABLED: "true"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      ANTHROPIC_TOKENIZER_MODEL: "${ANTHROPIC_TOKENIZER_MODEL:-claude-opus-4-7}"
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "400"
+    volumes:
+      - .:/repo
+      - api_node_modules_root:/repo/node_modules
+      - api_node_modules_api:/repo/apps/api/node_modules
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:7776/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 240s
+
+  sqlite-web:
+    build:
+      context: .
+      dockerfile: docker/sqlite-web/Dockerfile
+    image: continuum-sqlite-web:dev
+    container_name: continuum-sqlite-web-dev
+    init: true
+    ports:
+      - "127.0.0.1:7778:8080"
+    command:
+      - sh
+      - -lc
+      - |
+        set -eu
+        case "$(uname -m)" in
+          x86_64) sqlite_vec_pkg=sqlite-vec-linux-x64 ;;
+          aarch64|arm64) sqlite_vec_pkg=sqlite-vec-linux-arm64 ;;
+          *) echo "Unsupported sqlite-vec architecture: $(uname -m)" >&2; exit 1 ;;
+        esac
+        sqlite_vec_ext="$(find /repo/node_modules/.pnpm -path "*/$${sqlite_vec_pkg}@*/node_modules/$${sqlite_vec_pkg}/vec0.so" -print -quit)"
+        if [ -z "$${sqlite_vec_ext}" ]; then
+          echo "sqlite-vec extension not found for $${sqlite_vec_pkg}; start the api service first so node_modules is populated." >&2
+          exit 1
+        fi
+        exec sqlite_web -H 0.0.0.0 -x -e "$${sqlite_vec_ext}" /data/dev-orchestrator.db
+    volumes:
+      - api_node_modules_root:/repo/node_modules:ro
+      - ./.local-data:/data
+    restart: unless-stopped
+
+  embedder:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-arm64-latest
+    pull_policy: always
+    container_name: continuum-tei-dev
+    init: true
+    profiles: ["embedder"]
+    ports:
+      - "127.0.0.1:8080:80"
+    environment:
+      HF_TOKEN: "${HF_TOKEN:?HF_TOKEN required for gated model google/embeddinggemma-300m}"
+    command:
+      - "--model-id"
+      - "google/embeddinggemma-300m"
+      - "--served-model-name"
+      - "google/embeddinggemma-300m"
+      - "--dtype"
+      - "float32"
+    volumes:
+      - ./.local-data/tei:/data
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.dev
+    image: continuum-web:dev-watch
+    container_name: continuum-web-dev
+    init: true
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "127.0.0.1:7777:7777"
+    environment:
+      NODE_ENV: development
+      PUBLIC_API_BASE_URL: "http://127.0.0.1:7776"
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "400"
+    volumes:
+      - .:/repo
+      - web_node_modules_root:/repo/node_modules
+      - web_node_modules_web:/repo/apps/web/node_modules
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:7777/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 180s
+
+volumes:
+  api_node_modules_root:
+  api_node_modules_api:
+  web_node_modules_root:
+  web_node_modules_web:

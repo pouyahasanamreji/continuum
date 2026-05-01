@@ -1,230 +1,529 @@
-# continuum
+<div align="center">
 
-Turborepo monorepo for the **Continuum** — a project-scoped orchestration server exposed primarily over MCP (Model Context Protocol), with an optional REST surface and a web panel.
+# Continuum
 
-The orchestrator tracks **projects**, their per-project **plot** (PLOT.md workflow protocol), **knowledge** base, and a **registry of agents** (draft → active → merged/abandoned), persisted in SQLite. AI clients drive it via MCP tools; humans browse it via the web panel.
+### **The shared brain for your AI coding agents.**
 
-## Stack
+Persistent vector memory, semantic knowledge recall, and multi-agent orchestration —<br/>
+for **Claude Code**, **Codex**, **Cline**, and any MCP-speaking client.
 
-| App / package | Tech |
-| --- | --- |
-| [`apps/api`](apps/api) | NestJS 11, `@rekog/mcp-nest`, `better-sqlite3`, Zod, class-validator, Swagger |
-| [`apps/web`](apps/web) | Astro 6, React 19 islands, Tailwind CSS 4, shadcn/ui, TanStack Table |
-| [`packages/typescript-config`](packages/typescript-config) | Shared `tsconfig` bases (`@repo/typescript-config`) |
-| Tooling | Turborepo 2, pnpm workspaces, Prettier 3 |
+[![Node](https://img.shields.io/badge/node-%3E%3D22.12.0-brightgreen?style=for-the-badge)](package.json)
+[![pnpm](https://img.shields.io/badge/pnpm-10.33-orange?style=for-the-badge)](package.json)
+[![NestJS](https://img.shields.io/badge/NestJS-11-red?style=for-the-badge&logo=nestjs)](https://nestjs.com)
+[![Astro](https://img.shields.io/badge/Astro-6-purple?style=for-the-badge&logo=astro)](https://astro.build)
+[![sqlite-vec](https://img.shields.io/badge/sqlite--vec-RAG-blue?style=for-the-badge&logo=sqlite)](https://github.com/asg017/sqlite-vec)
+[![MCP](https://img.shields.io/badge/MCP-Streamable_HTTP-black?style=for-the-badge)](https://modelcontextprotocol.io)
 
-## Prerequisites
+[Quick Start](#quick-start) • [Memory & Vectors](#memory--vectors) • [Workflow](#the-workflow) • [MCP Tools](#mcp-tools) • [Wire It In](#wire-it-into-your-ai-client) • [Configuration](#configuration)
 
-- Node `>=22.12.0`
-- pnpm `>=10.33` (repo pins `pnpm@10.33.2`)
+</div>
 
-The `pnpm-workspace.yaml` whitelists native builds for `better-sqlite3`, `@nestjs/core`, `@swc/core`, `esbuild`, `msw`, `sharp`. Run `pnpm approve-builds` if pnpm prompts on first install.
+---
+
+> **Your agents forget. Continuum remembers.**
+>
+> Every Claude Code session ends with hard-won context evaporating. Every Codex run rediscovers the same conventions. Every parallel agent risks editing the same file as the last one. Continuum fixes all three with one local server: an embedded vector database, a canonical orchestration protocol, and a durable agent registry — shared across every MCP client on your machine.
+
+```
+   ┌──────────────┐  ┌────────┐  ┌───────┐  ┌────────┐
+   │  Claude Code │  │ Codex  │  │ Cline │  │  YOU   │
+   └──────┬───────┘  └────┬───┘  └───┬───┘  └────┬───┘
+          │ MCP            │ MCP      │ MCP       │ HTTP
+          └────────┬───────┴──────────┴───────────┘
+                   ▼
+          ╔══════════════════════════════════════╗
+          ║         CONTINUUM ORCHESTRATOR           ║
+          ║  ┌────────────┐  ┌────────────────┐  ║
+          ║  │  PLOT.md   │  │   KNOWLEDGE    │  ║
+          ║  │  protocol  │  │  (vectorized)  │  ║
+          ║  └────────────┘  └────────────────┘  ║
+          ║  ┌────────────┐  ┌────────────────┐  ║
+          ║  │   AGENTS   │  │   WEB PANEL    │  ║
+          ║  │  registry  │  │   (humans)     │  ║
+          ║  └────────────┘  └────────────────┘  ║
+          ╚══════════════════════════════════════╝
+                   │
+              SQLite + sqlite-vec
+              (one file, your disk)
+```
+
+> **No SaaS. No telemetry. No keys to manage.** Boots in seconds. Survives reboots. Scales with you.
+
+---
+
+## What you get
+
+|  | |
+|---|---|
+| 🧠 **Vectorized memory** | Every lesson your agents learn becomes a 768-dim embedding indexed in `sqlite-vec`. Recall is semantic, fuzzy, and instant — no exact-match games. |
+| 🔍 **RAG-native search** | `knowledge_search({q: "how do we handle webhook retries?"})` returns the exact lesson, embedded, ranked, ready to ground the next prompt. |
+| 🗺️ **Canonical workflow** | Every project gets a PLOT.md seeded with a 4-phase dispatch protocol — Intake → Research → Verify → Handoff. Stop re-explaining your process. |
+| 🤖 **Multi-agent registry** | State machine + reserved-path tracking stops parallel agents from clobbering each other across git worktrees. |
+| 📚 **Two-tier knowledge** | `fundamental` lessons are binding rules loaded on every dispatch. `situational` lessons surface via semantic search when relevant. |
+| 🖥️ **Human web panel** | Astro + React UI to browse projects, agents, plot, and knowledge while AI clients drive everything via MCP. |
+| 🔌 **Client-agnostic** | Standard MCP / Streamable HTTP. Works with Claude Code, Codex, Cline, Cursor, or anything that speaks the protocol. |
+| 🔒 **Local-first** | One SQLite file. WAL mode. No cloud. Optional embedder is your call (Ollama, TEI, anything OpenAI-shaped). |
+
+---
+
+## Why Continuum exists
+
+| Without Continuum | With Continuum |
+|---|---|
+| Session ends → context gone. | Lessons persist as embedded vectors. Recall survives reboots, models, and clients. |
+| You re-explain conventions every session. | `knowledge_search` retrieves the lesson before the agent plans. |
+| Two parallel agents edit the same file. | `reserved_paths` + status state machine surfaces collisions before dispatch. |
+| Each new task improvises orchestration. | PLOT.md protocol seeded into every project — Intake → Research → Verify → Handoff. |
+| "What did Claude do last week?" | `registry_list` shows every dispatch, status, plan, and merge SHA. |
+| Knowledge scattered across chat logs. | One SQLite database. One vector index. One source of truth. |
+
+---
 
 ## Quick start
+
+### 🐳 The easy path — one Docker command
+
+```bash
+docker compose -f docker-compose.dev.yml up
+```
+
+That's it. The whole stack comes up with hot reload, a SQLite browser, and a single shared volume — no Node, no pnpm, no native-build dance on your host machine.
+
+What you get:
+
+| Service | URL | What it is |
+|---|---|---|
+| **api** | http://localhost:7776 | NestJS + MCP server. Swagger at `/docs`. Hot-reloaded on file change. |
+| **web** | http://localhost:7777 | Astro + React panel. Hot-reloaded. |
+| **sqlite-web** | http://localhost:7778 | Browser UI for the live SQLite database — inspect projects, agents, knowledge, vectors. Loads `sqlite-vec` automatically. |
+| **embedder** (optional) | http://localhost:8080 | Hugging Face TEI running `embeddinggemma-300m`. Off by default. |
+
+Turn the embedder on with the `embedder` profile when you want semantic search:
+
+```bash
+HF_TOKEN=hf_xxx docker compose -f docker-compose.dev.yml --profile embedder up
+```
+
+Bind mounts keep the source tree on your host — edits are instant. Named volumes hold `node_modules` so installs survive restarts. Database lives at `./.local-data/dev-orchestrator.db` on your host, gitignored, safe to wipe.
+
+Stop everything:
+
+```bash
+docker compose -f docker-compose.dev.yml down            # keep data
+docker compose -f docker-compose.dev.yml down -v         # nuke volumes too
+```
+
+### 🛠️ Or run on bare metal
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-This boots both apps via Turborepo:
+| | |
+|---|---|
+| API + MCP | http://localhost:7776 (Swagger at `/docs`) |
+| Web panel | http://localhost:7777 |
 
-- API → <http://localhost:7776> (Swagger UI at `/docs`)
-- Web → <http://localhost:7777>
+Dev SQLite at `./.local-data/orchestrator.db`. Gitignored. Wipe to reset — next boot recreates and migrates forward.
 
-In dev, the API stores SQLite at `./.local-data/orchestrator.db` (set by `apps/api`'s `mcp:dev` script and the default `pnpm dev` flow). Without `ORCHESTRATOR_DB_PATH` it falls back to `/data/orchestrator.db`, which is the production container path.
+Requires Node `>=22.12.0` and pnpm `10.33+`. The compose path skips both.
 
-### Optional dev embedder
+---
 
-The wrapper dev compose file can run Hugging Face Text Embeddings Inference
-(TEI) for `google/embeddinggemma-300m`:
+## Memory & vectors
+
+This is the headline. Continuum's knowledge layer is what makes your agents stop being amnesiac.
+
+### How a lesson becomes memory
+
+```
+agent finishes a dispatch
+        │
+        ▼
+knowledge_create({
+  project, agentSlug, slug,
+  content: "When wiring rate-limit guards in Nest,
+            register them in app.module.ts AFTER
+            the auth guard, not before. Order matters.",
+  kind: 'situational'
+})
+        │
+        ▼
+content → embedder (Ollama / TEI)
+        │       embeddinggemma-300m → 768-dim vector
+        ▼
+SQLite row + sqlite-vec index entry
+        │       freshness profile = (URL, model, dim)
+        ▼
+forever queryable by ANY future agent on this project
+```
+
+### How recall works
+
+Phase 1 of every dispatch (the orchestrator does this automatically):
+
+```
+knowledge_search({ project, kind: 'fundamental' })
+  └─ returns binding rules — base branch, worktree convention, no-AI-attribution, etc.
+
+knowledge_search({ project, q: "rate limit middleware nest interceptor order" })
+  └─ vector similarity over your prose
+  └─ returns top-K lessons ranked by semantic closeness
+  └─ does NOT need exact wording — natural language works
+```
+
+The result: the agent that's about to plan your task already knows what your last five agents learned the hard way. No prompt engineering. No "here's our convention" copy-paste.
+
+### Two kinds of knowledge
+
+| Kind | Loaded when | Use for |
+|---|---|---|
+| `fundamental` | Every dispatch, unconditionally | Project-wide rules: base branch, worktree naming, commit conventions, append-only files |
+| `situational` | Only if semantically relevant to the task | Specific gotchas: "auth guard ordering," "regen artifact merge strategy," "Stripe webhook idempotency keys" |
+
+### The freshness profile
+
+Vectors are pinned to a `(EMBEDDER_URL, EMBEDDER_MODEL, EMBEDDER_DIM)` triple. Change any one and Continuum marks stale vectors for rebuild on next boot. You stay in control of which embedder owns your memory — local Ollama, self-hosted TEI, or anything OpenAI-shaped.
+
+### Pluggable embedders
 
 ```bash
-HF_TOKEN=... docker compose -f /Users/h.amreji/Pers/continuum/docker-compose.dev.yml --profile embedder up embedder
+# Option A — Ollama (simplest, fully local)
+ollama pull embeddinggemma
+# EMBEDDER_URL=http://127.0.0.1:11434/api/embed
+# EMBEDDER_MODEL=embeddinggemma   EMBEDDER_DIM=768
+
+# Option B — Hugging Face TEI (production-grade, batched)
+HF_TOKEN=hf_xxx docker compose -f docker-compose.dev.yml --profile embedder up embedder
+# EMBEDDER_URL=http://127.0.0.1:8080/v1/embeddings
+# EMBEDDER_MODEL=google/embeddinggemma-300m   EMBEDDER_DIM=768
+
+# Option C — anything OpenAI-compatible /v1/embeddings
+# Works out of the box. Match the dim.
 ```
 
-`google/embeddinggemma-300m` is gated on Hugging Face. Accept the model license
-there first, then pass `HF_TOKEN`. TEI is exposed to host/local API processes at
-`http://127.0.0.1:8080/v1/embeddings`; from the compose API container use
-`http://embedder:80/v1/embeddings`.
+No embedder configured? `knowledge_search` falls back to text-only matching. Still useful. Less magical. Add the embedder when you're ready.
 
-For TEI, set `EMBEDDER_MODEL=google/embeddinggemma-300m` and
-`EMBEDDER_DIM=768`. For Ollama, the API default model remains `embeddinggemma`
-and the endpoint style remains `/api/embed`. Panel settings stored in SQLite
-override env vars, so clear or update stale settings when changing embedder
-configuration. Knowledge vectors are tied to the effective embedder URL, model,
-and dimension profile; changing any of those values marks existing vectors stale.
-Regenerate or backfill vectors after profile changes. The v10 schema migration
-invalidates old v9 vector caches because their embedder metadata cannot be
-reconstructed.
+### Built on `sqlite-vec`
 
-## Repo layout
+The vector index lives in the same SQLite file as your projects, agents, and plot. One file. One backup. One restore. No separate vector DB to provision, no Pinecone bill, no Chroma daemon to babysit. WAL mode keeps reads concurrent with writes; foreign keys keep your registry consistent; `busy_timeout = 5000` keeps things calm under contention.
 
-```text
-.
-├── apps/
-│   ├── api/                  NestJS server (MCP + optional REST + Swagger)
-│   │   └── src/
-│   │       ├── main.ts
-│   │       ├── app.module.ts
-│   │       ├── database/     better-sqlite3 service + migrations (schema v5)
-│   │       ├── project/      project_* MCP tools + REST controller
-│   │       ├── plot/         plot / plot_update tools + PLOT.md template
-│   │       ├── knowledge/    knowledge_get / knowledge_update tools
-│   │       ├── agent/        agent_* + registry_list tools
-│   │       ├── migration/    project_migrate (bulk upsert) tool
-│   │       ├── agent-statuses/
-│   │       ├── common/       shared DTOs / guards
-│   │       └── utils/
-│   └── web/                  Astro panel
-│       └── src/
-│           ├── pages/        index, projects, agents, knowledge, plot
-│           ├── layouts/      PanelLayout.astro
-│           ├── components/
-│           │   ├── panel/    page-scoped React islands
-│           │   └── ui/       shadcn/ui primitives
-│           ├── hooks/  lib/  styles/  types/
-├── packages/
-│   └── typescript-config/    base tsconfigs consumed as workspace:*
-├── .local-data/              dev SQLite (gitignored)
-├── pnpm-workspace.yaml
-├── turbo.json
-└── package.json
+---
+
+## Wire it into your AI client
+
+### Claude Code
+
+```jsonc
+// ~/.claude.json  →  mcpServers
+{
+  "mcpServers": {
+    "continuum": {
+      "transport": "streamable-http",
+      "url": "http://127.0.0.1:7776/mcp"
+    }
+  }
+}
 ```
 
-## API — `apps/api` (`@continuum/api`)
+Restart Claude Code. Tools appear under `mcp__continuum__*`.
 
-NestJS 11 app that bootstraps with:
+### Codex
 
-- URI versioning enabled (e.g. `/v1/...`)
-- Global `ValidationPipe` (`whitelist`, `transform`, throws `422` with `{ status, errors }`)
-- 5 MB JSON / urlencoded body limit
-- Swagger document at `/docs`
-- CORS enabled when `CORS_ORIGIN` is set (`*` or comma-separated origins)
-- Listens on `0.0.0.0:${PORT ?? 7776}`
-
-### MCP transport
-
-`McpModule.forRoot` registers transport `STREAMABLE_HTTP` (stateful — UUID session ids) with name `continuum` v0.1.0. Tools are declared with `@Tool()` decorators (`@rekog/mcp-nest`) and validated with Zod schemas.
-
-### MCP tools
-
-All tools are project-scoped; `project` is a canonical absolute path that doubles as the project key.
-
-| Domain | Tool | Purpose |
-| --- | --- | --- |
-| Project | `project_list` | List projects in the registry |
-| | `project_get` | Fetch one project |
-| | `project_create` | Create project, seed PLOT.md + knowledge |
-| | `project_rename` | Rename a project |
-| | `project_delete` | Cascade-delete project + agents |
-| Plot | `plot` | Read PLOT.md |
-| | `plot_update` | Apply unified diff to PLOT.md |
-| Knowledge | `knowledge_get` | Read knowledge (optionally a `## section`) |
-| | `knowledge_update` | Apply unified diff to knowledge |
-| Agent | `registry_list` | List all agents for a project |
-| | `agent_get` | Fetch agent by slug |
-| | `agent_create` | Create draft agent |
-| | `agent_update` | Update / transition agent status |
-| Migration | `project_migrate` | Bulk upsert project + plot + knowledge + agents |
-
-Updates to plot and knowledge use **unified git-format diffs** (via the `diff` package), not full overwrites — patch-friendly and surfaces conflicts.
-
-### REST surface (optional)
-
-Each domain module exposes a `@Controller('api/orchestrator')` only when `PANEL_REST_ENABLED=true`. Disabled by default; the panel currently consumes the API through this gate.
-
-### Persistence
-
-`OrchestratorDbService` opens a `better-sqlite3` handle with:
-
-- `journal_mode = WAL`
-- `foreign_keys = ON`
-- `busy_timeout = 5000`
-
-Schema is migrated forward on boot (current version 6). Tables include `projects`, `plots` + `plot_history`, `knowledge` + `knowledge_history`, `agents`, `app_settings`. Soft-delete columns (`deleted_at`) are tracked where applicable. Destructive migrations are blocked unless `NODE_ENV !== 'production'` or `ORCHESTRATOR_ALLOW_DESTRUCTIVE_MIGRATE=1`.
-
-### Agent state machine
-
-Agents transition `draft → active → merged | abandoned`. `agent_update` enforces transitions and timestamps (`dispatched_at`, `merged_at`); `merged` requires a commit SHA (≥7 chars). `reserved_paths` (JSON) declare paths an agent owns inside its worktree to prevent collisions.
-
-### Plot template
-
-Every new project is seeded with a PLOT.md template (`apps/api/src/plot/default-template.ts`) describing the orchestration protocol: **Intake → Research → Verify → Implement**, with the implementation phase running in an isolated `git worktree` scoped by `reserved_paths`.
-
-### Scripts (`apps/api`)
-
-```bash
-pnpm -F @continuum/api dev          # nest start --watch
-pnpm -F @continuum/api mcp:dev      # dev with ORCHESTRATOR_DB_PATH=./.local-data/orchestrator.db
-pnpm -F @continuum/api build        # nest build → dist/
-pnpm -F @continuum/api start:prod   # node dist/main
-pnpm -F @continuum/api test         # jest unit tests (*.spec.ts under src/)
-pnpm -F @continuum/api test:e2e     # jest e2e (test/jest-e2e.json)
-pnpm -F @continuum/api lint         # eslint --fix
-pnpm -F @continuum/api check-types  # tsc --noEmit
+```toml
+# ~/.codex/config.toml
+[mcp_servers.continuum]
+transport = "streamable-http"
+url = "http://127.0.0.1:7776/mcp"
 ```
 
-### Environment variables
+### Anything else (Cline, Cursor, custom)
 
-> Settings can also be configured via the panel at `/settings`. Panel values stored in `app_settings` (SQLite, **plaintext**) take precedence over env vars. Env remains supported for headless deploys.
+Point any MCP-compatible client at `http://127.0.0.1:7776/mcp`. Streamable HTTP, stateful sessions (UUID-keyed). Server name `continuum`.
+
+---
+
+## Your first project
+
+Inside any wired client:
+
+```
+Create a Continuum project for /absolute/path/to/my/repo,
+then read the PLOT.md and act as orchestrator
+for the following task: <describe what you want done>.
+```
+
+What happens:
+
+1. Client calls `project_create({project: "/absolute/path/..."})`
+2. Server seeds PLOT.md (the orchestration protocol) and an empty knowledge base
+3. Client calls `plot({project})`, reads the protocol, enters orchestrator mode
+4. Client follows the 4-phase workflow — researches, verifies, persists a dispatch record, hands you a ready-to-paste prompt for a fresh agent in a git worktree
+
+You paste the prompt into a new Claude Code / Codex session. That agent codes inside an isolated worktree against its reserved paths. Other parallel agents see the new agent's reservations via the coordination brief.
+
+When work merges, the orchestrator records what was learned via `knowledge_create` — and **every future dispatch on this project benefits from it forever**.
+
+---
+
+## The workflow
+
+### 1. Intake
+
+```
+registry_list({project})                        // who's active, what paths reserved
+knowledge_search({project, kind:'fundamental'}) // binding rules — load every one
+knowledge_search({project, q: "<task intent>"}) // RAG over prior lessons
+```
+
+### 2. Research
+
+Spawn an `Explore` / `Plan` subagent. It reads the codebase against the loaded knowledge. Produces a file-by-file plan: create / modify / delete. **Plan only — no code.**
+
+### 3. Verify
+
+Spawn a critique agent. It challenges every file touched, looks for orphans and broken call sites, cross-checks against active agents' reserved paths. Returns annotated deltas.
+
+### 4. Handoff
+
+```
+agent_create({
+  project, slug, branch, worktree,
+  reservedPaths,        // paths this agent owns
+  request,              // verbatim human task
+  plan,                 // final agreed plan
+  implPrompt,           // self-contained prompt for the dispatched agent
+  coordinationBrief,    // short block for every other active agent
+})
+```
+
+Agent lands as `draft`. Promote with `agent_update({status:'active'})` when you dispatch. On merge, record the SHA and bank the lesson:
+
+```
+agent_update({ project, slug, status:'merged', mergedCommit, postMergeNotes })
+knowledge_create({ project, agentSlug, slug, content, kind:'situational' })
+```
+
+The orchestrator never edits source, runs regen, merges branches, or pushes commits. It researches, verifies, coordinates, and persists. Code lives in fresh agents inside isolated worktrees.
+
+---
+
+## MCP tools
+
+Every tool takes `project` (canonical absolute path) as its first argument.
+
+### Project
+
+| Tool | Purpose |
+|---|---|
+| `project_list` | Enumerate registered projects |
+| `project_get` | Fetch one project |
+| `project_create` | Register project, seed PLOT.md + knowledge |
+| `project_rename` | Rename a project |
+| `project_delete` | Cascade delete (project + agents + lessons) |
+
+### Plot — the orchestration protocol
+
+| Tool | Purpose |
+|---|---|
+| `plot` | Read PLOT.md |
+| `plot_update` | Apply a unified git-format diff (zero fuzz, exact context match) |
+
+`plot_update` validates `--- a/PLOT.md` / `+++ b/PLOT.md` / `@@` headers strictly. Context mismatch throws `hunk_mismatch` with the failing hunk header. Re-read with `plot`, regenerate the diff, retry. No silent overwrites.
+
+### Knowledge — the vector memory
+
+| Tool | Purpose |
+|---|---|
+| `knowledge_list` | All lessons (slug, agentSlug, kind, timestamps) |
+| `knowledge_search` | Semantic query — `q` is free-text intent, optional `kind`, optional `limit` |
+| `knowledge_get` | Read one lesson by slug |
+| `knowledge_create` | Record a new lesson — `kind: 'fundamental' \| 'situational'`. Embedded automatically. |
+| `knowledge_update` | Replace lesson content. Re-embeds on save. |
+| `knowledge_delete` | Retire a lesson |
+
+`knowledge_search` runs hybrid lookup over the `sqlite-vec` index. Pass natural prose — questions, task statements, descriptions all work. SQL wildcard syntax does not.
+
+### Agents
+
+| Tool | Purpose |
+|---|---|
+| `registry_list` | Every agent for a project (all statuses) |
+| `agent_get` | Drill into one agent by slug |
+| `agent_create` | Persist a draft dispatch record |
+| `agent_update` | Transition status, edit fields |
+
+Allowed transitions: `draft → active → merged | abandoned`. `merged` requires a 7–40 char commit SHA. `abandoned` requires a reason. Only `active` agents reserve paths.
+
+---
+
+## Example session
+
+```
+human: orchestrate adding rate-limit middleware to /api routes
+
+claude: → registry_list({project})           // 0 active
+        → knowledge_search({project, kind:'fundamental'})
+                                              // base-branch=main, worktree=../<slug>/
+        → knowledge_search({project, q:'rate limit middleware nest interceptor'})
+                                              // ✨ hits 2 prior lessons on guard ordering
+        → spawn Plan subagent → plan returned
+        → spawn critique subagent → 1 issue: missed `app.module.ts` registration → fixed
+        → agent_create({
+            slug: 'rate-limit-middleware',
+            branch: 'feature/rate-limit',
+            worktree: '/abs/path/../rate-limit-middleware',
+            reservedPaths: ['apps/api/src/common/rate-limit/**', 'apps/api/src/app.module.ts'],
+            request: 'orchestrate adding rate-limit middleware to /api routes',
+            plan: '...',
+            implPrompt: '...',
+            coordinationBrief: 'reserves common/rate-limit/**, edits app.module.ts (additive)'
+          })
+        → here's the impl prompt to paste into a fresh session: ...
+
+[ task ships ]
+
+claude: → agent_update({slug:'rate-limit-middleware', status:'merged', mergedCommit:'a1b2c3d'})
+        → knowledge_create({
+            agentSlug: 'rate-limit-middleware',
+            slug: 'rate-limit-guard-ordering',
+            kind: 'situational',
+            content: 'Rate-limit guards must register AFTER auth guard in app.module.ts.
+                      Order in providers array decides execution order. Reverse → 401s
+                      bypass rate limiting.'
+          })
+        // ✅ lesson embedded → vector indexed → permanent memory
+```
+
+Next time anyone — you, Claude, Codex — touches anything rate-limit-shaped on this project, that lesson surfaces automatically.
+
+---
+
+## Web panel
+
+Astro 6 + React 19 islands. Tailwind v4. shadcn/ui.
+
+| Page | What |
+|---|---|
+| `/` | Landing |
+| `/projects` | Projects list — TanStack Table, sortable, filterable |
+| `/agents` | Registry / status board across projects |
+| `/knowledge` | Markdown viewer — GFM, syntax highlight, anchored sections, search |
+| `/plot` | Plot viewer + editor with diff preview |
+| `/settings` | Embedder URL + model + dim, tokenizer key, REST gate, log level |
+
+Settings stored in `app_settings` (SQLite) override env vars. Headless deploys still work via env alone.
+
+---
+
+## Configuration
+
+Both env vars and panel settings supported. Panel takes precedence.
 
 | Var | Default | Purpose |
-| --- | --- | --- |
+|---|---|---|
 | `PORT` | `7776` | HTTP port |
-| `CORS_ORIGIN` | _unset_ (CORS off) | `*` or comma-separated origins |
-| `ORCHESTRATOR_DB_PATH` | `/data/orchestrator.db` | SQLite file path; dev scripts override to `./.local-data/orchestrator.db` |
-| `PANEL_REST_ENABLED` | `false` | Mount REST controllers under `/api/orchestrator` |
-| `NODE_ENV` | _unset_ | Production guards destructive migrations |
-| `ORCHESTRATOR_ALLOW_DESTRUCTIVE_MIGRATE` | _unset_ | Set to `1` to opt in to destructive migrations in production |
-| `ANTHROPIC_API_KEY` | _unset_ | Required for `/api/orchestrator/{plot,knowledge}/token-count`. Server-side only. |
-| `ANTHROPIC_TOKENIZER_MODEL` | `claude-opus-4-7` | Model passed to Anthropic `count_tokens`. |
-| `EMBEDDER_URL` | _unset_ | Embedding endpoint. Supports Ollama `/api/embed` and OpenAI-compatible `/v1/embeddings` such as TEI. |
-| `EMBEDDER_MODEL` | `embeddinggemma` | Model sent to the embedder. Use `google/embeddinggemma-300m` for TEI. |
-| `EMBEDDER_DIM` | `768` | Expected embedding dimension. This is part of the vector freshness profile with embedder URL and model. |
+| `CORS_ORIGIN` | _unset_ | `*` or comma-separated origins |
+| `ORCHESTRATOR_DB_PATH` | `/data/orchestrator.db` | SQLite path. Dev scripts override to `./.local-data/orchestrator.db` |
+| `PANEL_REST_ENABLED` | `false` | Mount `/api/orchestrator/*` REST surface (panel uses it) |
+| `NODE_ENV` | _unset_ | Production blocks destructive migrations |
+| `ORCHESTRATOR_ALLOW_DESTRUCTIVE_MIGRATE` | _unset_ | Set `1` to override in production |
+| `ANTHROPIC_API_KEY` | _unset_ | Token-count endpoints (server-side only) |
+| `ANTHROPIC_TOKENIZER_MODEL` | `claude-opus-4-7` | Model name for `count_tokens` |
+| `EMBEDDER_URL` | _unset_ | Embedding endpoint — Ollama or OpenAI-compatible |
+| `EMBEDDER_MODEL` | `embeddinggemma` | Model sent to embedder |
+| `EMBEDDER_DIM` | `768` | Expected embedding dimension |
 
-## Web — `apps/web` (`@continuum/web`)
+---
 
-Astro 6 multi-page panel with React 19 islands. Tailwind v4 is wired through `@tailwindcss/vite`; UI uses shadcn/ui primitives (Radix + `tailwind-variants`-style components). `@/` aliases `apps/web/src/`.
+## Stack
 
-Pages:
+| Layer | Tech |
+|---|---|
+| **Memory** | `sqlite-vec` vector index • `embeddinggemma-300m` (default) • Ollama / TEI / OpenAI-compatible embedders • freshness-pinned vectors |
+| API | NestJS 11 • `@rekog/mcp-nest` • `@modelcontextprotocol/sdk` 1.10 • Zod 4 • Swagger |
+| Persistence | `better-sqlite3` (WAL, FK, busy_timeout 5s) |
+| Diff engine | `diff` 9 (zero-fuzz unified-diff applier) |
+| Web | Astro 6 • React 19 • Tailwind 4 • shadcn/ui • TanStack Table • rehype/remark • highlight.js |
+| Tooling | Turborepo 2 • pnpm 10.33 • TypeScript 5.9 • Prettier 3 • Jest |
 
-- `/` — landing
-- `/projects` — projects list (TanStack Table island)
-- `/agents` — agent registry / status board
-- `/knowledge` — knowledge viewer (Markdown + GFM + highlight.js via rehype/remark)
-- `/plot` — plot viewer/editor
+---
 
-Vite dev server runs on port `7777` with polling watch (works inside containers / mounted volumes).
-
-### Scripts (`apps/web`)
-
-```bash
-pnpm -F @continuum/web dev          # astro dev
-pnpm -F @continuum/web build        # astro build → dist/
-pnpm -F @continuum/web preview      # astro preview
-pnpm -F @continuum/web check-types  # astro check && tsc --noEmit
-```
-
-## Root scripts (Turborepo)
+## Scripts
 
 ```bash
-pnpm dev          # turbo run dev — both apps in watch
-pnpm build        # turbo run build — outputs dist/** and .astro/**
+pnpm dev          # turbo run dev — api + web in watch
+pnpm build        # turbo run build
 pnpm lint         # turbo run lint
 pnpm check-types  # turbo run check-types
-pnpm format       # prettier --write across ts/tsx/js/astro/md/json
+pnpm format       # prettier across ts/tsx/js/astro/md/json
+
+pnpm -F @continuum/api dev          # api only — nest start --watch
+pnpm -F @continuum/api mcp:dev      # api with local SQLite at .local-data/
+pnpm -F @continuum/api test         # jest unit tests
+pnpm -F @continuum/api test:e2e     # jest e2e
+
+pnpm -F @continuum/web dev          # web only — astro dev
+pnpm -F @continuum/web build        # astro build → dist/
 ```
 
-`turbo.json` caches `build`, `lint`, `check-types`; `dev` is `persistent` and uncached. Build inputs include `.env*` files, so changing env triggers rebuilds.
+---
 
 ## Conventions
 
-- Prettier: 100-col, double quotes, semicolons, ES5 trailing commas (`.prettierrc.json`).
-- Shared TS bases live in `@repo/typescript-config`; both apps consume them as `workspace:*`.
-- Domain modules in the API follow a flat NestJS layout: `*.module.ts`, `*.tool.ts` (MCP), `*.controller.ts` (REST, REST-gated), `*.service.ts`, plus DTOs and persistence helpers.
-- Mutations to long-form documents (PLOT.md, knowledge) flow through unified diffs, not full-text writes.
+- **`project` is always a canonical absolute path.** Pass the project root, never a worktree subdirectory. Worktree paths throw `project_not_found`.
+- **Plot mutations flow through unified diffs.** No full-text writes. Bad context → server rejects with the failing `@@` header.
+- **Knowledge updates are whole-content replace.** Pass the full new `content`. Re-embedded on save.
+- **Reserved paths are JSON arrays of globs.** Only `active` agents reserve.
+- **Migrations are forward-only on boot.** Production blocks destructive migrations unless explicitly opted in.
 
-## Local data
+---
 
-`./.local-data/` holds the dev SQLite database (`orchestrator.db` + `-wal` + `-shm`). It is gitignored and safe to delete — the next boot recreates and migrates a fresh database.
+## Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| `project_not_found` | Passing a worktree path. Use the canonical project root registered with `project_create`. |
+| `hunk_mismatch` from `plot_update` | Stale diff. Re-read with `plot`, regenerate against current content, retry. |
+| `knowledge_search` returns empty / weird results | Embedder unreachable, model mismatch, or dim mismatch. Check `/settings`. Backfill stale vectors. |
+| Vectors not regenerating after embedder swap | Freshness profile (URL + model + dim) must change. Restart server to trigger backfill. |
+| `invalid_transition` from `agent_update` | Allowed: `draft → active → merged \| abandoned`. Anything else throws. |
+| `missing_merged_commit` / `invalid_merged_commit` | `merged` requires a 7–40 char SHA. |
+| Schema migration refuses in production | Set `ORCHESTRATOR_ALLOW_DESTRUCTIVE_MIGRATE=1` if you really mean it. |
+
+---
+
+## Roadmap
+
+- [ ] Cross-project knowledge sharing (`kind: 'global'`)
+- [ ] Embedding re-rank with a small reranker model
+- [ ] One-shot import of existing CLAUDE.md / AGENTS.md / Cursor rules → fundamentals
+- [ ] Read-only public knowledge mirror (publish a project's lessons as a static site)
+- [ ] Built-in observation hooks for SessionStart / SessionEnd events
+
+---
+
+## Contributing
+
+Contributions welcome. Fork, branch, test, PR. Match Prettier defaults (100-col, double quotes, semicolons, ES5 trailing commas). Keep MCP tool changes Zod-typed.
+
+---
+
+## Support
+
+| | |
+|---|---|
+| Issues | GitHub Issues |
+| Docs | this README + Swagger UI at `/docs` + the seeded PLOT.md inside each project |
+| MCP spec | https://modelcontextprotocol.io |
+
+---
+
+<div align="center">
+
+### Stop letting your agents forget.
+
+**`pnpm install && pnpm dev`** — and they never will again.
+
+</div>
