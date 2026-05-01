@@ -58,6 +58,10 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
       where.push('kind = ?');
       params.push(f.kind);
     }
+    if (f?.q !== undefined && f?.q !== null && f.q !== '') {
+      where.push('(slug LIKE ? OR content LIKE ?)');
+      params.push(`%${f.q}%`, `%${f.q}%`);
+    }
 
     const orderClauses: string[] = [];
     if (options.sortOptions?.length) {

@@ -26,6 +26,7 @@ export interface KnowledgeFilterOptions {
   agentId?: number | null;
   slug?: string | null;
   kind?: KnowledgeKindEnum | null;
+  q?: string | null;
 }
 
 export interface KnowledgeSortOption {

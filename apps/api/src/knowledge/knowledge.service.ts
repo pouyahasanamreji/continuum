@@ -66,6 +66,7 @@ export class KnowledgeService {
   findManyWithPagination(query: QueryKnowledgeDto): Knowledge[] {
     const projectId = this.resolveProjectIdOrThrow(query.project);
     const filters = query.filters ?? null;
+    const trimmedQ = query.q?.trim() ?? '';
     let agentId: number | null = null;
     if (filters?.agentSlug) {
       const agent = this.agentRepo.findByProjectIdAndSlug(
@@ -80,6 +81,7 @@ export class KnowledgeService {
         agentId,
         slug: filters?.slug ?? null,
         kind: filters?.kind ?? null,
+        q: trimmedQ || null,
       },
       sortOptions: query.sort ?? null,
       paginationOptions: { page: query.page ?? 1, limit: query.limit ?? 10 },

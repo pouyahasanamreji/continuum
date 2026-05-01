@@ -31,6 +31,27 @@ export async function getJson<T>(path: string): Promise<T> {
   return (await r.json()) as T;
 }
 
+export interface PaginatedResponse<T> {
+  data: T[];
+  hasNextPage: boolean;
+}
+
+export async function getPaginatedJson<T>(
+  path: string,
+  label: string,
+): Promise<PaginatedResponse<T>> {
+  const body = await getJson<unknown>(path);
+  if (typeof body !== "object" || body === null) {
+    throw new Error(`Malformed ${label} response`);
+  }
+  const data = (body as { data?: unknown }).data;
+  const hasNextPage = (body as { hasNextPage?: unknown }).hasNextPage;
+  if (!Array.isArray(data) || typeof hasNextPage !== "boolean") {
+    throw new Error(`Malformed ${label} response`);
+  }
+  return { data: data as T[], hasNextPage };
+}
+
 export async function getText(path: string): Promise<string> {
   const r = await handle(
     await fetch(`${API_BASE}${path}`, { credentials: "omit" }),

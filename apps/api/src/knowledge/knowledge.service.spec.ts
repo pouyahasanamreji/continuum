@@ -477,6 +477,84 @@ describe('KnowledgeService.remove', () => {
   });
 });
 
+describe('KnowledgeService.findManyWithPagination', () => {
+  it('matches q by slug and content substring', async () => {
+    const { service, seedAgent } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'slug-needle',
+      content: 'body',
+    });
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'content-match',
+      content: 'body with needle inside',
+    });
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'miss',
+      content: 'unrelated',
+    });
+
+    const rows = service.findManyWithPagination({
+      project: PROJECT_PATH,
+      q: 'needle',
+      page: 1,
+      limit: 10,
+    });
+
+    expect(rows.map((r) => r.slug)).toEqual([
+      'content-match',
+      'slug-needle',
+    ]);
+  });
+
+  it('applies q before limit and offset', async () => {
+    const { service, seedAgent } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'target-older',
+      content: 'needle body',
+    });
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'target-newer',
+      content: 'needle body',
+    });
+    for (let i = 0; i < 5; i++) {
+      await service.create({
+        project: PROJECT_PATH,
+        agentSlug: 'alpha',
+        slug: `other-${i}`,
+        content: 'unrelated',
+      });
+    }
+
+    const firstPage = service.findManyWithPagination({
+      project: PROJECT_PATH,
+      q: 'needle',
+      page: 1,
+      limit: 1,
+    });
+    const secondPage = service.findManyWithPagination({
+      project: PROJECT_PATH,
+      q: 'needle',
+      page: 2,
+      limit: 1,
+    });
+
+    expect(firstPage.map((r) => r.slug)).toEqual(['target-newer']);
+    expect(secondPage.map((r) => r.slug)).toEqual(['target-older']);
+  });
+});
+
 describe('KnowledgeService.search', () => {
   it('returns empty for no matches', async () => {
     const { service, seedAgent, embedder } = makeHarness();

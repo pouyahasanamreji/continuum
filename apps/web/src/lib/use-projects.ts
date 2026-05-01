@@ -1,31 +1,41 @@
-import { useCallback, useEffect, useState } from "react";
-import { getJson } from "./api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getPaginatedJson } from "./api";
 import type { ProjectFull } from "@/types/project";
 
-interface PaginatedProjects {
-  data: ProjectFull[];
-  hasNextPage: boolean;
+interface UseProjectsOptions {
+  page?: number;
+  limit?: number;
 }
 
-export function useProjects() {
+export function useProjects(options: UseProjectsOptions = {}) {
+  const page = options.page ?? 1;
+  const limit = options.limit ?? 50;
   const [projects, setProjects] = useState<ProjectFull[] | null>(null);
+  const [hasNextPage, setHasNextPage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const requestIdRef = useRef(0);
 
   const refresh = useCallback(async () => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setLoading(true);
     try {
-      const res = await getJson<PaginatedProjects>(
-        "/api/orchestrator/projects?limit=50",
+      const res = await getPaginatedJson<ProjectFull>(
+        `/api/orchestrator/projects?page=${page}&limit=${limit}`,
+        "projects",
       );
+      if (requestId !== requestIdRef.current) return;
       setProjects(res.data);
+      setHasNextPage(res.hasNextPage);
       setError(null);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, []);
+  }, [limit, page]);
 
   useEffect(() => {
     void refresh();
@@ -44,5 +54,5 @@ export function useProjects() {
     };
   }, [refresh]);
 
-  return { projects, loading, error, refresh };
+  return { projects, hasNextPage, loading, error, refresh };
 }

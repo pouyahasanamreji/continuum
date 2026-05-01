@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -9,6 +9,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ProjectsTable } from "./ProjectsTable";
 import { columns } from "./columns";
+import { TablePagination } from "../TablePagination";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { RenameProjectDialog } from "./RenameProjectDialog";
 import { DeleteProjectAlert } from "./DeleteProjectAlert";
@@ -26,13 +27,32 @@ import { useActiveProject } from "@/lib/use-active-project";
 import { PlusIcon } from "lucide-react";
 import type { ProjectFull } from "@/types/project";
 
+const PAGE_SIZE = 10;
+
 export function ProjectsPage() {
-  const { projects, loading, error, refresh } = useProjects();
+  const [page, setPage] = useState(1);
+  const { projects, hasNextPage, loading, error, refresh } = useProjects({
+    page,
+    limit: PAGE_SIZE,
+  });
   const activePath = useActiveProject();
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<ProjectFull | null>(null);
   const [renaming, setRenaming] = useState<ProjectFull | null>(null);
   const [deleting, setDeleting] = useState<ProjectFull | null>(null);
+  const emptyNextFromPageRef = useRef<number | null>(null);
+  const canGoNext = hasNextPage && emptyNextFromPageRef.current !== page;
+
+  useEffect(() => {
+    setSelected(null);
+  }, [page]);
+
+  useEffect(() => {
+    if (!loading && projects?.length === 0 && page > 1) {
+      emptyNextFromPageRef.current = page - 1;
+      setPage((current) => Math.max(1, current - 1));
+    }
+  }, [loading, page, projects]);
 
   if (error) {
     return (
@@ -70,11 +90,22 @@ export function ProjectsPage() {
           <Skeleton className="h-64 w-full" />
         </div>
       ) : (
-        <ProjectsTable
-          columns={columns}
-          data={projects ?? []}
-          onRowClick={setSelected}
-        />
+        <div>
+          <ProjectsTable
+            columns={columns}
+            data={projects ?? []}
+            onRowClick={setSelected}
+          />
+          <TablePagination
+            page={page}
+            pageSize={PAGE_SIZE}
+            rowCount={projects?.length ?? 0}
+            hasNextPage={canGoNext}
+            isLoading={loading}
+            onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+            onNext={() => setPage((current) => current + 1)}
+          />
+        </div>
       )}
 
       <CreateProjectDialog
@@ -82,7 +113,12 @@ export function ProjectsPage() {
         onOpenChange={setCreateOpen}
         onCreated={(p) => {
           setActiveProject(p.path);
-          void refresh();
+          emptyNextFromPageRef.current = null;
+          if (page === 1) {
+            void refresh();
+          } else {
+            setPage(1);
+          }
         }}
       />
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Card,
   CardContent,
@@ -9,30 +9,69 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "./agents/data-table";
 import { columns } from "./agents/columns";
 import { AgentDetailDialog } from "./AgentDetailDialog";
-import { getJson, withProject } from "@/lib/api";
+import { TablePagination } from "./TablePagination";
+import { getPaginatedJson, withProject } from "@/lib/api";
 import { useActiveProject } from "@/lib/use-active-project";
 import type { AgentFull } from "@/types/agent";
+
+const PAGE_SIZE = 10;
 
 export function AgentsPage() {
   const activeProject = useActiveProject();
   const [agents, setAgents] = useState<AgentFull[] | null>(null);
+  const [page, setPage] = useState(1);
+  const [hasNextPage, setHasNextPage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<AgentFull | null>(null);
+  const projectPageKeyRef = useRef<string | null>(null);
+  const emptyNextFromPageRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setSelected(null);
+  }, [activeProject, page]);
 
   useEffect(() => {
     if (!activeProject) {
+      projectPageKeyRef.current = null;
+      emptyNextFromPageRef.current = null;
       setAgents(null);
+      setHasNextPage(false);
       setError(null);
       return;
+    }
+    if (projectPageKeyRef.current !== activeProject) {
+      projectPageKeyRef.current = activeProject;
+      emptyNextFromPageRef.current = null;
+      if (page !== 1) {
+        setAgents(null);
+        setHasNextPage(false);
+        setError(null);
+        setPage(1);
+        return;
+      }
     }
     let cancelled = false;
     setAgents(null);
     setError(null);
-    getJson<{ data: AgentFull[]; hasNextPage: boolean }>(
-      withProject("/api/orchestrator/agents?limit=50", activeProject),
+    getPaginatedJson<AgentFull>(
+      withProject(
+        `/api/orchestrator/agents?page=${page}&limit=${PAGE_SIZE}`,
+        activeProject,
+      ),
+      "agents",
     )
       .then((res) => {
-        if (!cancelled) setAgents(res.data);
+        if (cancelled) return;
+        if (res.data.length === 0 && page > 1) {
+          emptyNextFromPageRef.current = page - 1;
+          setHasNextPage(false);
+          setPage((current) => Math.max(1, current - 1));
+          return;
+        }
+        setAgents(res.data);
+        setHasNextPage(
+          res.hasNextPage && emptyNextFromPageRef.current !== page,
+        );
       })
       .catch((err: unknown) => {
         if (!cancelled)
@@ -41,7 +80,7 @@ export function AgentsPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeProject]);
+  }, [activeProject, page]);
 
   if (!activeProject) {
     return (
@@ -86,7 +125,17 @@ export function AgentsPage() {
 
   return (
     <>
-      <DataTable columns={columns} data={agents} onRowClick={setSelected} />
+      <div>
+        <DataTable columns={columns} data={agents} onRowClick={setSelected} />
+        <TablePagination
+          page={page}
+          pageSize={PAGE_SIZE}
+          rowCount={agents.length}
+          hasNextPage={hasNextPage}
+          onPrevious={() => setPage((current) => Math.max(1, current - 1))}
+          onNext={() => setPage((current) => current + 1)}
+        />
+      </div>
       <AgentDetailDialog
         agent={selected}
         onOpenChange={(open) => !open && setSelected(null)}
