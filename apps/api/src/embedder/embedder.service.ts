@@ -29,7 +29,7 @@ export class EmbedderService {
 
   async embedWithProfile(text: string): Promise<EmbeddedVector> {
     const resolved = this.settings.resolveEmbedderProfile();
-    if (!resolved.url) {
+    if (!resolved.configured) {
       const embedding = await this.inprocess.embed(text);
       const profile = {
         url: inprocessEmbedderUrl(),

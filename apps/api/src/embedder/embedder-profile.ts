@@ -17,11 +17,11 @@ export interface EmbedderProfile {
 }
 
 export interface ResolvedEmbedderProfile {
-  url: string | null;
+  url: string;
   model: string;
   dim: number;
   configured: boolean;
-  signature: string | null;
+  signature: string;
 }
 
 export interface EmbeddedVector {

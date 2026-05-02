@@ -22,3 +22,4 @@ pnpm-debug.log*
 *.pem
 .idea
 .vscode
+docker-compose.override.yml
