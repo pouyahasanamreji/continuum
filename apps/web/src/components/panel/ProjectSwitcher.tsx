@@ -21,6 +21,7 @@ import {
 import { useActiveProject } from "@/lib/use-active-project";
 import { useProjects } from "@/lib/use-projects";
 import { setActiveProject } from "@/lib/active-project-store";
+import { withBase } from "@/lib/base-path";
 import type { ProjectFull } from "@/types/project";
 
 export function ProjectSwitcher() {
@@ -102,7 +103,7 @@ export function ProjectSwitcher() {
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild className="gap-2 p-2">
-              <a href="/projects">
+              <a href={withBase("/projects")}>
                 <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">
                   <PlusIcon className="size-4" />
                 </div>

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { API_BASE, withProject } from "@/lib/api";
+import { withBase } from "@/lib/base-path";
 import { useActiveProject } from "@/lib/use-active-project";
 
 // Subset of api/Plot — additional fields (id, projectId, createdAt, deletedAt) are ignored by the viewer.
@@ -82,7 +83,7 @@ export function MarkdownViewer({ endpoint, emptyMessage }: Props) {
         <CardContent>
           <p className="text-sm text-muted-foreground">
             Select a project from the sidebar, or create one in{" "}
-            <a className="underline" href="/projects">
+            <a className="underline" href={withBase("/projects")}>
               Projects
             </a>
             .

@@ -5,6 +5,8 @@ import react from "@astrojs/react";
 import { fileURLToPath, URL } from "node:url";
 
 export default defineConfig({
+  base: "/panel",
+  trailingSlash: "ignore",
   integrations: [react()],
   server: { host: true, port: 7777 },
   vite: {

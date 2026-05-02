@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { API_BASE, getJson, withProject } from "@/lib/api";
+import { withBase } from "@/lib/base-path";
 import { useActiveProject } from "@/lib/use-active-project";
 import type { AgentFull, AgentStatus } from "@/types/agent";
 
@@ -80,7 +81,7 @@ export function Dashboard() {
           <CardTitle>No active project</CardTitle>
           <CardDescription>
             Select a project from the sidebar switcher, or create one in{" "}
-            <a className="underline" href="/projects">
+            <a className="underline" href={withBase("/projects")}>
               Projects
             </a>
             .
@@ -136,7 +137,7 @@ export function Dashboard() {
       </Card>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <a href="/plot" className="block">
+        <a href={withBase("/plot")} className="block">
           <Card className="h-full transition-colors hover:bg-accent">
             <CardHeader>
               <CardTitle>PLOT</CardTitle>
@@ -144,7 +145,7 @@ export function Dashboard() {
             </CardHeader>
           </Card>
         </a>
-        <a href="/knowledge" className="block">
+        <a href={withBase("/knowledge")} className="block">
           <Card className="h-full transition-colors hover:bg-accent">
             <CardHeader>
               <CardTitle>Knowledge</CardTitle>
@@ -152,7 +153,7 @@ export function Dashboard() {
             </CardHeader>
           </Card>
         </a>
-        <a href="/agents" className="block">
+        <a href={withBase("/agents")} className="block">
           <Card className="h-full transition-colors hover:bg-accent">
             <CardHeader>
               <CardTitle>Agents</CardTitle>
