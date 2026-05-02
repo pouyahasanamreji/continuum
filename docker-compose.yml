@@ -1,0 +1,30 @@
+name: continuum
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: continuum/apps/api/Dockerfile
+      args:
+        REPO_DIR: continuum
+    image: ghcr.io/pouyahasanamreji/continuum:0.1.0
+    container_name: continuum-api
+    init: true
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7776:7776"
+    environment:
+      NODE_ENV: production
+      PORT: "7776"
+      ORCHESTRATOR_DB_PATH: /data/orchestrator.db
+    volumes:
+      - orchestrator-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:7776/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  orchestrator-data:

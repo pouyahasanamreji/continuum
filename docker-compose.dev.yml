@@ -61,26 +61,6 @@ services:
       - ./.local-data:/data
     restart: unless-stopped
 
-  embedder:
-    image: ghcr.io/huggingface/text-embeddings-inference:cpu-arm64-latest
-    pull_policy: always
-    container_name: continuum-tei-dev
-    init: true
-    profiles: ["embedder"]
-    ports:
-      - "127.0.0.1:8080:80"
-    environment:
-      HF_TOKEN: "${HF_TOKEN:?HF_TOKEN required for gated model google/embeddinggemma-300m}"
-    command:
-      - "--model-id"
-      - "google/embeddinggemma-300m"
-      - "--served-model-name"
-      - "google/embeddinggemma-300m"
-      - "--dtype"
-      - "float32"
-    volumes:
-      - ./.local-data/tei:/data
-
   web:
     build:
       context: .
