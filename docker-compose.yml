@@ -3,11 +3,9 @@ name: continuum
 services:
   api:
     build:
-      context: ..
-      dockerfile: continuum/apps/api/Dockerfile
-      args:
-        REPO_DIR: continuum
-    image: ghcr.io/pouyahasanamreji/continuum:0.1.0
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: pouyahasanamreji/continuum:0.1.0
     container_name: continuum-api
     init: true
     restart: unless-stopped

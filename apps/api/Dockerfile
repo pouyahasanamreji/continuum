@@ -1,19 +1,16 @@
 # syntax=docker/dockerfile:1.7
-ARG REPO_DIR=continuum
 
 FROM node:22.12-bookworm-slim AS deps
-ARG REPO_DIR
 WORKDIR /repo
 RUN npm install -g corepack@latest \
   && corepack enable \
   && corepack prepare pnpm@10.33.2 --activate
-COPY ${REPO_DIR}/pnpm-lock.yaml ${REPO_DIR}/pnpm-workspace.yaml ${REPO_DIR}/package.json ${REPO_DIR}/turbo.json ./
-COPY ${REPO_DIR}/packages packages
-COPY ${REPO_DIR}/apps apps
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
+COPY packages packages
+COPY apps apps
 RUN pnpm install --frozen-lockfile
 
 FROM deps AS build
-ARG REPO_DIR
 WORKDIR /repo
 RUN pnpm --filter @continuum/api build
 RUN pnpm --filter @continuum/api deploy --legacy --prod /deploy
@@ -30,6 +27,7 @@ RUN npm install --no-save @huggingface/transformers@4.2.0 \
   && ls /cache
 
 FROM node:22.12-bookworm-slim AS runtime
+LABEL io.modelcontextprotocol.server.name="io.github.pouyahasanamreji/continuum"
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=7776 \

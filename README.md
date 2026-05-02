@@ -2,7 +2,7 @@
 
 # Continuum
 
-### **The shared brain for your AI coding agents.**
+### **The MCP-native memory layer for agent swarms.**
 
 Persistent vector memory, semantic knowledge recall, and multi-agent orchestration —<br/>
 for **Claude Code**, **Codex**, **Cline**, and any MCP-speaking client.

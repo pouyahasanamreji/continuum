@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/.turbo
+**/.astro
+**/.cache
+**/*.tsbuildinfo
+**/.git
+**/.local-data
+.orchestrator
+.claude
+.mcp.json
+docker-compose.yml
+docker-compose.dev.yml
