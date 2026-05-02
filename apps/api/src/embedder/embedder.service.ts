@@ -1,11 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EmbedderError } from './embedder.error';
 import { AppSettingsService } from '../app-settings/app-settings.service';
-import { DEFAULT_EMBEDDER_MODEL, EmbeddedVector } from './embedder-profile';
 import {
-  INPROCESS_EMBEDDER_MODEL_ID,
-  InprocessEmbedderService,
-} from './inprocess-embedder';
+  DEFAULT_EMBEDDER_MODEL,
+  EmbeddedVector,
+  inprocessEmbedderUrl,
+} from './embedder-profile';
+import { InprocessEmbedderService } from './inprocess-embedder';
 
 const TIMEOUT_MS = 30_000;
 const OPENAI_EMBEDDINGS_PATH = '/v1/embeddings';
@@ -31,7 +32,7 @@ export class EmbedderService {
     if (!resolved.url) {
       const embedding = await this.inprocess.embed(text);
       const profile = {
-        url: `inprocess://${INPROCESS_EMBEDDER_MODEL_ID}`,
+        url: inprocessEmbedderUrl(),
         model: resolved.model || DEFAULT_EMBEDDER_MODEL,
         dim: resolved.dim,
       };

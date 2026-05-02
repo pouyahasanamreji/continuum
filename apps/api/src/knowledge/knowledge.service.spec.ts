@@ -15,6 +15,7 @@ import {
   DEFAULT_EMBEDDER_DIM,
   DEFAULT_EMBEDDER_MODEL,
   EmbedderProfile,
+  inprocessEmbedderUrl,
   makeEmbedderSignature,
 } from '../embedder/embedder-profile';
 
@@ -37,12 +38,13 @@ class StubAppSettings {
     const dim =
       Number.isNaN(parsed) || parsed < 1 ? DEFAULT_EMBEDDER_DIM : parsed;
     if (!url) {
+      const inprocessUrl = inprocessEmbedderUrl();
       return {
-        url: null,
+        url: inprocessUrl,
         model,
         dim,
         configured: false,
-        signature: null,
+        signature: makeEmbedderSignature({ url: inprocessUrl, model, dim }),
       };
     }
     return {

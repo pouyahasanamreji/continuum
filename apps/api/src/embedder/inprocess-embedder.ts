@@ -5,13 +5,15 @@ import {
 } from '@nestjs/common';
 import { createRequire } from 'node:module';
 import { EmbedderError } from './embedder.error';
-import { DEFAULT_EMBEDDER_DIM } from './embedder-profile';
+import {
+  DEFAULT_EMBEDDER_DIM,
+  INPROCESS_EMBEDDER_MODEL_ID,
+} from './embedder-profile';
+
+export { INPROCESS_EMBEDDER_MODEL_ID };
 
 const requireForTransformers = createRequire(__filename);
 type TransformersModule = typeof import('@huggingface/transformers');
-
-export const INPROCESS_EMBEDDER_MODEL_ID =
-  'Snowflake/snowflake-arctic-embed-m-v1.5';
 
 type FeatureExtractionPipeline = (
   text: string,

@@ -11,6 +11,7 @@ import { AppSettingsRepository } from './infrastructure/persistence/app-settings
 import {
   DEFAULT_EMBEDDER_DIM,
   DEFAULT_EMBEDDER_MODEL,
+  inprocessEmbedderUrl,
   makeEmbedderSignature,
   ResolvedEmbedderProfile,
 } from '../embedder/embedder-profile';
@@ -32,12 +33,13 @@ export class AppSettingsService {
     const dim =
       this.parseDim(this.resolve(SETTING_EMBEDDER_DIM)) ?? DEFAULT_EMBEDDER_DIM;
     if (!url) {
+      const inprocessUrl = inprocessEmbedderUrl();
       return {
-        url: null,
+        url: inprocessUrl,
         model,
         dim,
         configured: false,
-        signature: null,
+        signature: makeEmbedderSignature({ url: inprocessUrl, model, dim }),
       };
     }
     return {

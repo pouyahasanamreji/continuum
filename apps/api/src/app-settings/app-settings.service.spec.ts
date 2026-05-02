@@ -314,15 +314,14 @@ describe('AppSettingsService', () => {
     expect(service.resolveEmbedderProfile().signature).not.toBe(first);
   });
 
-  it('resolveEmbedderProfile reports no URL as unconfigured with null signature', () => {
+  it('resolveEmbedderProfile reports no URL as unconfigured with in-process sentinel signature', () => {
     getValue.mockReturnValue(null);
 
-    expect(service.resolveEmbedderProfile()).toEqual({
-      url: null,
-      model: DEFAULT_EMBEDDER_MODEL,
-      dim: 768,
-      configured: false,
-      signature: null,
-    });
+    const profile = service.resolveEmbedderProfile();
+    expect(profile.url).toBe(`inprocess://${DEFAULT_EMBEDDER_MODEL}`);
+    expect(profile.model).toBe(DEFAULT_EMBEDDER_MODEL);
+    expect(profile.dim).toBe(768);
+    expect(profile.configured).toBe(false);
+    expect(profile.signature).toMatch(/^[A-Za-z0-9_-]{12}$/);
   });
 });
