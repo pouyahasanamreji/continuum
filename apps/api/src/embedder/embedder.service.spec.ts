@@ -1,6 +1,6 @@
 import { EmbedderService } from './embedder.service';
-import { EmbedderError } from './embedder.error';
 import { AppSettingsService } from '../app-settings/app-settings.service';
+import { InprocessEmbedderService } from './inprocess-embedder';
 import {
   DEFAULT_EMBEDDER_DIM,
   DEFAULT_EMBEDDER_MODEL,
@@ -49,9 +49,21 @@ class StubAppSettings {
   }
 }
 
-const make = (store?: Map<string, string | null>) =>
+function makeInprocessStub(impl?: () => Promise<number[]>): {
+  embed: jest.Mock;
+} {
+  return {
+    embed: jest.fn().mockImplementation(impl ?? (() => Promise.resolve(vec()))),
+  };
+}
+
+const make = (
+  store?: Map<string, string | null>,
+  inprocess: { embed: jest.Mock } = makeInprocessStub(),
+): EmbedderService =>
   new EmbedderService(
     new StubAppSettings(store) as unknown as AppSettingsService,
+    inprocess as unknown as InprocessEmbedderService,
   );
 
 type FetchInput = Parameters<typeof fetch>[0];
@@ -86,14 +98,26 @@ describe('EmbedderService', () => {
     fetchSpy.mockRestore();
   });
 
-  it('throws url_missing when DB and env both unset', async () => {
-    const service = make();
-    await expect(service.embed('hello')).rejects.toMatchObject({
-      name: 'EmbedderError',
-      reason: 'url_missing',
-    });
-    await expect(service.embed('hello')).rejects.toBeInstanceOf(EmbedderError);
+  it('falls back to in-process embedder when no URL configured', async () => {
+    const inprocess = makeInprocessStub();
+    const service = make(undefined, inprocess);
+    const result = await service.embed('hello');
+    expect(result.length).toBe(DEFAULT_EMBEDDER_DIM);
+    expect(inprocess.embed).toHaveBeenCalledTimes(1);
+    expect(inprocess.embed).toHaveBeenCalledWith('hello');
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not call in-process embedder when EMBEDDER_URL is set', async () => {
+    const inprocess = makeInprocessStub();
+    const service = make(
+      new Map([['EMBEDDER_URL', 'http://x/embed']]),
+      inprocess,
+    );
+    fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [vec()] }));
+    await service.embed('hello');
+    expect(inprocess.embed).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it('throws upstream_rejected on non-2xx response', async () => {
@@ -177,7 +201,7 @@ describe('EmbedderService', () => {
     });
   });
 
-  it('posts model=embeddinggemma + input=text body to URL exactly', async () => {
+  it('posts default model + input=text body to URL exactly', async () => {
     const service = make(new Map([['EMBEDDER_URL', 'http://x/embed']]));
     fetchSpy.mockResolvedValue(jsonResponse(200, { embeddings: [vec()] }));
     await service.embed('the-text');
@@ -192,7 +216,10 @@ describe('EmbedderService', () => {
       model: string;
       input: string;
     };
-    expect(body).toEqual({ model: 'embeddinggemma', input: 'the-text' });
+    expect(body).toEqual({
+      model: DEFAULT_EMBEDDER_MODEL,
+      input: 'the-text',
+    });
   });
 
   it('posts OpenAI-compatible body to /v1/embeddings URLs', async () => {
@@ -212,7 +239,7 @@ describe('EmbedderService', () => {
       encoding_format: string;
     };
     expect(body).toEqual({
-      model: 'embeddinggemma',
+      model: DEFAULT_EMBEDDER_MODEL,
       input: 'the-text',
       encoding_format: 'float',
     });

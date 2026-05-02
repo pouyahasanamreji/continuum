@@ -507,10 +507,7 @@ describe('KnowledgeService.findManyWithPagination', () => {
       limit: 10,
     });
 
-    expect(rows.map((r) => r.slug)).toEqual([
-      'content-match',
-      'slug-needle',
-    ]);
+    expect(rows.map((r) => r.slug)).toEqual(['content-match', 'slug-needle']);
   });
 
   it('applies q before limit and offset', async () => {
@@ -566,7 +563,7 @@ describe('KnowledgeService.search', () => {
       content: 'unique-body',
     });
     embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('url_missing'),
+      new EmbedderError('inprocess_load_failed'),
     );
     expect(await service.search(PROJECT_PATH, 'absent', undefined)).toEqual([]);
   });
@@ -587,7 +584,7 @@ describe('KnowledgeService.search', () => {
       content: 'unrelated',
     });
     embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('url_missing'),
+      new EmbedderError('inprocess_load_failed'),
     );
     const found = await service.search(PROJECT_PATH, 'cascade', undefined);
     expect(found.length).toBe(1);
@@ -604,7 +601,7 @@ describe('KnowledgeService.search', () => {
       content: 'body',
     });
     embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('url_missing'),
+      new EmbedderError('inprocess_load_failed'),
     );
     const found = await service.search(PROJECT_PATH, 'cascade', undefined);
     expect(found.length).toBe(1);
@@ -622,7 +619,7 @@ describe('KnowledgeService.search', () => {
       });
     }
     embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('url_missing'),
+      new EmbedderError('inprocess_load_failed'),
     );
     const found = await service.search(PROJECT_PATH, 'match', undefined, 2);
     expect(found.length).toBe(2);
@@ -638,7 +635,7 @@ describe('KnowledgeService.search', () => {
       content: 'match',
     });
     embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('url_missing'),
+      new EmbedderError('inprocess_load_failed'),
     );
     expect(
       (await service.search(PROJECT_PATH, 'match', undefined, 9999)).length,
@@ -695,13 +692,13 @@ describe('KnowledgeService.search vector path', () => {
       )
       .mockImplementation(() => undefined);
     embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('url_missing'),
+      new EmbedderError('inprocess_load_failed'),
     );
     const found = await service.search(PROJECT_PATH, 'cascade', undefined);
     expect(vecSpy).not.toHaveBeenCalled();
     expect(likeSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('url_missing'),
+      expect.stringContaining('inprocess_load_failed'),
     );
     expect(found.length).toBe(1);
   });
@@ -919,7 +916,7 @@ describe('KnowledgeService kind field', () => {
       kind: 'fundamental',
     });
     embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('url_missing'),
+      new EmbedderError('inprocess_load_failed'),
     );
     const found = await service.search(PROJECT_PATH, 'cascade', 'fundamental');
     expect(found.length).toBe(1);
@@ -1134,7 +1131,7 @@ describe('KnowledgeService vectorization', () => {
     const { service, seedAgent, embedder, db } = makeHarness();
     seedAgent('alpha');
     embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('url_missing'),
+      new EmbedderError('inprocess_load_failed'),
     );
     await expect(
       service.create({

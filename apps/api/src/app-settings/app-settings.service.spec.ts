@@ -7,6 +7,7 @@ import {
   SETTING_EMBEDDER_MODEL,
   SETTING_EMBEDDER_URL,
 } from './app-settings.keys';
+import { DEFAULT_EMBEDDER_MODEL } from '../embedder/embedder-profile';
 
 describe('AppSettingsService', () => {
   let getValue: jest.Mock;
@@ -260,7 +261,7 @@ describe('AppSettingsService', () => {
 
     expect(service.resolveEmbedderProfile()).toMatchObject({
       url: 'http://env/v1/embeddings',
-      model: 'embeddinggemma',
+      model: DEFAULT_EMBEDDER_MODEL,
       dim: 768,
       configured: true,
     });
@@ -318,7 +319,7 @@ describe('AppSettingsService', () => {
 
     expect(service.resolveEmbedderProfile()).toEqual({
       url: null,
-      model: 'embeddinggemma',
+      model: DEFAULT_EMBEDDER_MODEL,
       dim: 768,
       configured: false,
       signature: null,
