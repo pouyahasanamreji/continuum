@@ -265,42 +265,17 @@ export class KnowledgeService {
         effectiveLimit,
       );
     }
-    let queryVec: EmbeddedVector | null = null;
-    try {
-      queryVec = await this.embedder.embedWithProfile(query);
-    } catch (err) {
-      const reason = err instanceof EmbedderError ? err.reason : 'unknown';
-      this.logger.warn(
-        `knowledge_search vector skipped, falling back to LIKE: ${reason}`,
-      );
-    }
-    if (queryVec !== null) {
-      const signature = makeEmbedderSignature(queryVec.profile);
-      const fresh = this.repo.countFreshForSearch(projectId, kind, signature);
-      if (fresh === 0) {
-        return this.repo.searchByContent(
-          projectId,
-          query,
-          kind,
-          effectiveLimit,
-        );
-      }
-      try {
-        return this.repo.searchByVector(
-          projectId,
-          queryVec.embedding,
-          kind,
-          effectiveLimit,
-          signature,
-        );
-      } catch (err) {
-        this.logger.warn(
-          `knowledge_search vector query failed, falling back to LIKE: ` +
-            (err instanceof Error ? err.message : String(err)),
-        );
-      }
-    }
-    return this.repo.searchByContent(projectId, query, kind, effectiveLimit);
+    const queryVec = await this.embedder.embedWithProfile(query);
+    const signature = makeEmbedderSignature(queryVec.profile);
+    const fresh = this.repo.countFreshForSearch(projectId, kind, signature);
+    if (fresh === 0) return [];
+    return this.repo.searchByVector(
+      projectId,
+      queryVec.embedding,
+      kind,
+      effectiveLimit,
+      signature,
+    );
   }
 
   private vectorMetadata(embedded: EmbeddedVector): KnowledgeVectorMetadata {

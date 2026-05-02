@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export const DEFAULT_EMBEDDER_MODEL = 'embeddinggemma';
+export const DEFAULT_EMBEDDER_MODEL = 'Snowflake/snowflake-arctic-embed-m-v1.5';
 export const DEFAULT_EMBEDDER_DIM = 768;
 
 export interface EmbedderProfile {

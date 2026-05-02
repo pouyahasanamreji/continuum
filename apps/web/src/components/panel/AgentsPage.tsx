@@ -11,6 +11,7 @@ import { columns } from "./agents/columns";
 import { AgentDetailDialog } from "./AgentDetailDialog";
 import { TablePagination } from "./TablePagination";
 import { getPaginatedJson, withProject } from "@/lib/api";
+import { withBase } from "@/lib/base-path";
 import { useActiveProject } from "@/lib/use-active-project";
 import type { AgentFull } from "@/types/agent";
 
@@ -91,7 +92,7 @@ export function AgentsPage() {
         <CardContent>
           <p className="text-sm text-muted-foreground">
             Select a project from the sidebar, or create one in{" "}
-            <a className="underline" href="/projects">
+            <a className="underline" href={withBase("/projects")}>
               Projects
             </a>
             .

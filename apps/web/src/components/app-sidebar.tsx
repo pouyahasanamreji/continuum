@@ -20,6 +20,7 @@ import {
   FolderKanbanIcon,
   Settings as SettingsIcon,
 } from "lucide-react"
+import { withBase } from "@/lib/base-path"
 
 const data = {
   user: {
@@ -30,39 +31,33 @@ const data = {
   navMain: [
     {
       title: "Dashboard",
-      url: "/",
+      path: "/",
       icon: <LayoutDashboardIcon />,
-      isActive: false,
     },
     {
       title: "Projects",
-      url: "/projects",
+      path: "/projects",
       icon: <FolderKanbanIcon />,
-      isActive: false,
     },
     {
       title: "PLOT",
-      url: "/plot",
+      path: "/plot",
       icon: <ScrollTextIcon />,
-      isActive: false,
     },
     {
       title: "Knowledge",
-      url: "/knowledge",
+      path: "/knowledge",
       icon: <BookOpenIcon />,
-      isActive: false,
     },
     {
       title: "Agents",
-      url: "/agents",
+      path: "/agents",
       icon: <UsersIcon />,
-      isActive: false,
     },
     {
       title: "Settings",
-      url: "/settings",
+      path: "/settings",
       icon: <SettingsIcon />,
-      isActive: false,
     },
   ],
 }
@@ -72,8 +67,10 @@ export function AppSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar> & { activeRoute?: string }) {
   const navItemsWithActive = data.navMain.map((item) => ({
-    ...item,
-    isActive: item.url === activeRoute,
+    title: item.title,
+    icon: item.icon,
+    url: withBase(item.path),
+    isActive: item.path === activeRoute,
   }))
   return (
     <Sidebar collapsible="icon" {...props}>

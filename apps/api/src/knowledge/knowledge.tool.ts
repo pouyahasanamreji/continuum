@@ -133,7 +133,7 @@ export class KnowledgeTool {
   @Tool({
     name: 'knowledge_search',
     description:
-      'Semantic vector search (cosine-equivalent ranking on L2-normalized embeddings) across knowledge lessons in `project`. Falls back to substring match when the embedder is unconfigured or unreachable. At least one of `q` or `kind` is required. `q` is a free-text semantic query (no SQL wildcards). `kind: "fundamental"` filters to binding lessons that must be followed on every dispatch; `kind: "situational"` filters to context-specific lessons. Optional `limit` (default 10, max 50). Use this tool at Phase-1 Intake — first with `kind: "fundamental"` to load every binding rule, then with `q` for topical relevance.',
+      'Semantic vector search (cosine-equivalent ranking on L2-normalized embeddings) across knowledge lessons in `project`. Embedder is required and runs in-process by default; semantic only. At least one of `q` or `kind` is required. `q` is a free-text semantic query (no SQL wildcards). `kind: "fundamental"` filters to binding lessons that must be followed on every dispatch; `kind: "situational"` filters to context-specific lessons. Optional `limit` (default 10, max 50). Use this tool at Phase-1 Intake — first with `kind: "fundamental"` to load every binding rule, then with `q` for topical relevance.',
     parameters: searchKnowledgeDto,
   })
   async knowledgeSearch(args: SearchKnowledgeDto) {

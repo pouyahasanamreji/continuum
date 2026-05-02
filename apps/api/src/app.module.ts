@@ -1,6 +1,17 @@
-import { Module } from '@nestjs/common';
+import { Module, type DynamicModule } from '@nestjs/common';
 import { McpModule, McpTransportType } from '@rekog/mcp-nest';
+import { ServeStaticModule } from '@nestjs/serve-static';
 import { randomUUID } from 'node:crypto';
+
+const panelStaticImports: DynamicModule[] = process.env.PANEL_STATIC_ROOT
+  ? [
+      ServeStaticModule.forRoot({
+        rootPath: process.env.PANEL_STATIC_ROOT,
+        serveRoot: '/panel',
+        serveStaticOptions: { index: 'index.html', fallthrough: false },
+      }),
+    ]
+  : [];
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
@@ -14,6 +25,7 @@ import { AppSettingsModule } from './app-settings/app-settings.module';
 
 @Module({
   imports: [
+    ...panelStaticImports,
     McpModule.forRoot({
       name: 'continuum',
       version: '0.1.0',

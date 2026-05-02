@@ -2,6 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { EmbedderError } from './embedder.error';
 import { AppSettingsService } from '../app-settings/app-settings.service';
 import { DEFAULT_EMBEDDER_MODEL, EmbeddedVector } from './embedder-profile';
+import {
+  INPROCESS_EMBEDDER_MODEL_ID,
+  InprocessEmbedderService,
+} from './inprocess-embedder';
 
 const TIMEOUT_MS = 30_000;
 const OPENAI_EMBEDDINGS_PATH = '/v1/embeddings';
@@ -13,7 +17,10 @@ type OpenAiEmbeddingResponse = { data?: unknown };
 export class EmbedderService {
   private readonly logger = new Logger(EmbedderService.name);
 
-  constructor(private readonly settings: AppSettingsService) {}
+  constructor(
+    private readonly settings: AppSettingsService,
+    private readonly inprocess: InprocessEmbedderService,
+  ) {}
 
   async embed(text: string): Promise<number[]> {
     return (await this.embedWithProfile(text)).embedding;
@@ -21,7 +28,21 @@ export class EmbedderService {
 
   async embedWithProfile(text: string): Promise<EmbeddedVector> {
     const resolved = this.settings.resolveEmbedderProfile();
-    if (!resolved.url) throw new EmbedderError('url_missing');
+    if (!resolved.url) {
+      const embedding = await this.inprocess.embed(text);
+      const profile = {
+        url: `inprocess://${INPROCESS_EMBEDDER_MODEL_ID}`,
+        model: resolved.model || DEFAULT_EMBEDDER_MODEL,
+        dim: resolved.dim,
+      };
+      if (embedding.length !== profile.dim) {
+        throw new EmbedderError(
+          'dimension_mismatch',
+          `got ${embedding.length} expected ${profile.dim}`,
+        );
+      }
+      return { embedding, profile };
+    }
     const profile = {
       url: resolved.url,
       model: resolved.model || DEFAULT_EMBEDDER_MODEL,

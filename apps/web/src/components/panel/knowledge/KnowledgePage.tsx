@@ -16,6 +16,7 @@ import { KnowledgeFormDialog } from "./KnowledgeFormDialog";
 import { DeleteKnowledgeAlert } from "./DeleteKnowledgeAlert";
 import { TablePagination } from "../TablePagination";
 import { getJson, getPaginatedJson, withProject } from "@/lib/api";
+import { withBase } from "@/lib/base-path";
 import { useActiveProject } from "@/lib/use-active-project";
 import type { AgentFull } from "@/types/agent";
 import type { KnowledgeFull } from "@/types/knowledge";
@@ -158,7 +159,7 @@ export function KnowledgePage() {
         <CardContent>
           <p className="text-sm text-muted-foreground">
             Select a project from the sidebar, or create one in{" "}
-            <a className="underline" href="/projects">
+            <a className="underline" href={withBase("/projects")}>
               Projects
             </a>
             .

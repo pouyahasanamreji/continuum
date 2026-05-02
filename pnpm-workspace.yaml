@@ -8,3 +8,4 @@ allowBuilds:
   esbuild: true
   msw: true
   sharp: true
+  onnxruntime-node: true
