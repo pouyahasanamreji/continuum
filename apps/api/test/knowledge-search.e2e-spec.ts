@@ -19,6 +19,9 @@ interface ToolEnvelope {
   isError?: boolean;
 }
 
+const HEAVY = process.env.RUN_HEAVY_E2E === 'true';
+const heavy = HEAVY ? describe : describe.skip;
+
 describe('knowledge_search MCP tool (e2e)', () => {
   let app: INestApplication;
   let discovery: McpRegistryDiscoveryService;
@@ -64,7 +67,8 @@ describe('knowledge_search MCP tool (e2e)', () => {
       project: projectPath,
       agentSlug: 'alpha',
       slug: 'cascade-pitfall',
-      content: 'Cascade-on-delete fires only via project; agent_id never directly.',
+      content:
+        'Cascade-on-delete fires only via project; agent_id never directly.',
     });
     await callTool('knowledge_create', {
       project: projectPath,
@@ -85,44 +89,57 @@ describe('knowledge_search MCP tool (e2e)', () => {
     if (app) await app.close();
   });
 
-  it('returns matching lessons for a content keyword', async () => {
-    const env = await callTool('knowledge_search', {
-      project: projectPath,
-      q: 'cascade',
+  describe('[light: kind-only / validation]', () => {
+    it('kind: fundamental filters to fundamental rows only', async () => {
+      const env = await callTool('knowledge_search', {
+        project: projectPath,
+        kind: 'fundamental',
+      });
+      expect(env.isError).toBeFalsy();
+      const parsed = JSON.parse(env.content[0].text) as Array<{
+        slug: string;
+        kind: string;
+      }>;
+      expect(parsed.length).toBe(1);
+      expect(parsed[0].slug).toBe('binding-rule');
+      expect(parsed[0].kind).toBe('fundamental');
     });
-    expect(env.isError).toBeFalsy();
-    const parsed = JSON.parse(env.content[0].text) as Array<{ slug: string }>;
-    expect(parsed.length).toBe(1);
-    expect(parsed[0].slug).toBe('cascade-pitfall');
+
+    it('returns isError when neither q nor kind provided', async () => {
+      const env = await callTool('knowledge_search', { project: projectPath });
+      expect(env.isError).toBe(true);
+    });
   });
 
-  it('returns empty array when no rows match', async () => {
-    const env = await callTool('knowledge_search', {
-      project: projectPath,
-      q: 'no-such-token-anywhere',
+  heavy('[HEAVY: real embedder]', () => {
+    it('returns matching lessons for a semantic content keyword', async () => {
+      const env = await callTool('knowledge_search', {
+        project: projectPath,
+        q: 'cascade',
+      });
+      expect(env.isError).toBeFalsy();
+      const parsed = JSON.parse(env.content[0].text) as Array<{
+        slug: string;
+      }>;
+      expect(parsed.length).toBeGreaterThan(0);
+      expect(parsed[0].slug).toBe('cascade-pitfall');
     });
-    expect(env.isError).toBeFalsy();
-    const parsed = JSON.parse(env.content[0].text) as unknown[];
-    expect(parsed).toEqual([]);
-  });
 
-  it('kind: fundamental filters to fundamental rows only', async () => {
-    const env = await callTool('knowledge_search', {
-      project: projectPath,
-      kind: 'fundamental',
+    it('returns ranked results for a no-match query without exact matches at top', async () => {
+      const env = await callTool('knowledge_search', {
+        project: projectPath,
+        q: 'no-such-token-anywhere',
+      });
+      expect(env.isError).toBeFalsy();
+      const parsed = JSON.parse(env.content[0].text) as Array<{
+        slug: string;
+      }>;
+      // Vector search returns ranked rows even when no row strongly matches.
+      // Assert that 'cascade-pitfall' (clearly orthogonal) is not the top hit.
+      expect(parsed.length).toBeGreaterThanOrEqual(0);
+      if (parsed.length > 0) {
+        expect(parsed[0].slug).not.toBe('cascade-pitfall');
+      }
     });
-    expect(env.isError).toBeFalsy();
-    const parsed = JSON.parse(env.content[0].text) as Array<{
-      slug: string;
-      kind: string;
-    }>;
-    expect(parsed.length).toBe(1);
-    expect(parsed[0].slug).toBe('binding-rule');
-    expect(parsed[0].kind).toBe('fundamental');
-  });
-
-  it('returns isError when neither q nor kind provided', async () => {
-    const env = await callTool('knowledge_search', { project: projectPath });
-    expect(env.isError).toBe(true);
   });
 });

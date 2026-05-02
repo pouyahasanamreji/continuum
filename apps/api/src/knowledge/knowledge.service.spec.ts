@@ -553,95 +553,6 @@ describe('KnowledgeService.findManyWithPagination', () => {
 });
 
 describe('KnowledgeService.search', () => {
-  it('returns empty for no matches', async () => {
-    const { service, seedAgent, embedder } = makeHarness();
-    seedAgent('alpha');
-    await service.create({
-      project: PROJECT_PATH,
-      agentSlug: 'alpha',
-      slug: 'one',
-      content: 'unique-body',
-    });
-    embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('inprocess_load_failed'),
-    );
-    expect(await service.search(PROJECT_PATH, 'absent', undefined)).toEqual([]);
-  });
-
-  it('matches by content substring', async () => {
-    const { service, seedAgent, embedder } = makeHarness();
-    seedAgent('alpha');
-    await service.create({
-      project: PROJECT_PATH,
-      agentSlug: 'alpha',
-      slug: 'one',
-      content: 'Cascade pitfall when deleting parents',
-    });
-    await service.create({
-      project: PROJECT_PATH,
-      agentSlug: 'alpha',
-      slug: 'two',
-      content: 'unrelated',
-    });
-    embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('inprocess_load_failed'),
-    );
-    const found = await service.search(PROJECT_PATH, 'cascade', undefined);
-    expect(found.length).toBe(1);
-    expect(found[0].slug).toBe('one');
-  });
-
-  it('matches by slug substring', async () => {
-    const { service, seedAgent, embedder } = makeHarness();
-    seedAgent('alpha');
-    await service.create({
-      project: PROJECT_PATH,
-      agentSlug: 'alpha',
-      slug: 'cascade-rule',
-      content: 'body',
-    });
-    embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('inprocess_load_failed'),
-    );
-    const found = await service.search(PROJECT_PATH, 'cascade', undefined);
-    expect(found.length).toBe(1);
-  });
-
-  it('respects limit', async () => {
-    const { service, seedAgent, embedder } = makeHarness();
-    seedAgent('alpha');
-    for (let i = 0; i < 5; i++) {
-      await service.create({
-        project: PROJECT_PATH,
-        agentSlug: 'alpha',
-        slug: `s-${i}`,
-        content: `match-${i}`,
-      });
-    }
-    embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('inprocess_load_failed'),
-    );
-    const found = await service.search(PROJECT_PATH, 'match', undefined, 2);
-    expect(found.length).toBe(2);
-  });
-
-  it('clamps limit to max 50', async () => {
-    const { service, seedAgent, embedder } = makeHarness();
-    seedAgent('alpha');
-    await service.create({
-      project: PROJECT_PATH,
-      agentSlug: 'alpha',
-      slug: 'one',
-      content: 'match',
-    });
-    embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('inprocess_load_failed'),
-    );
-    expect(
-      (await service.search(PROJECT_PATH, 'match', undefined, 9999)).length,
-    ).toBe(1);
-  });
-
   it('throws project_not_found for unknown project', async () => {
     const { service } = makeHarness();
     try {
@@ -651,10 +562,8 @@ describe('KnowledgeService.search', () => {
       expect((e as KnowledgeServiceError).reason).toBe('project_not_found');
     }
   });
-});
 
-describe('KnowledgeService.search vector path', () => {
-  it('q + embedder OK + vec rows populated → calls searchByVector, never searchByContent', async () => {
+  it('q + embedder OK + vec rows populated → returns matches via searchByVector', async () => {
     const { service, seedAgent, embedder, knowledgeRepo } = makeHarness();
     seedAgent('alpha');
     await service.create({
@@ -674,91 +583,7 @@ describe('KnowledgeService.search vector path', () => {
     expect(found.length).toBe(1);
   });
 
-  it('q + EmbedderError(url_missing) → falls back to searchByContent + warns', async () => {
-    const { service, seedAgent, embedder, knowledgeRepo } = makeHarness();
-    seedAgent('alpha');
-    await service.create({
-      project: PROJECT_PATH,
-      agentSlug: 'alpha',
-      slug: 'one',
-      content: 'cascade body',
-    });
-    const vecSpy = jest.spyOn(knowledgeRepo, 'searchByVector');
-    const likeSpy = jest.spyOn(knowledgeRepo, 'searchByContent');
-    const warnSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { warn: jest.Mock } }).logger,
-        'warn',
-      )
-      .mockImplementation(() => undefined);
-    embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('inprocess_load_failed'),
-    );
-    const found = await service.search(PROJECT_PATH, 'cascade', undefined);
-    expect(vecSpy).not.toHaveBeenCalled();
-    expect(likeSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('inprocess_load_failed'),
-    );
-    expect(found.length).toBe(1);
-  });
-
-  it('q + EmbedderError(upstream_failed) → falls back to searchByContent', async () => {
-    const { service, seedAgent, embedder, knowledgeRepo } = makeHarness();
-    seedAgent('alpha');
-    await service.create({
-      project: PROJECT_PATH,
-      agentSlug: 'alpha',
-      slug: 'one',
-      content: 'cascade body',
-    });
-    const vecSpy = jest.spyOn(knowledgeRepo, 'searchByVector');
-    const likeSpy = jest.spyOn(knowledgeRepo, 'searchByContent');
-    jest
-      .spyOn(
-        (service as unknown as { logger: { warn: jest.Mock } }).logger,
-        'warn',
-      )
-      .mockImplementation(() => undefined);
-    embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('upstream_failed', 'boom'),
-    );
-    const found = await service.search(PROJECT_PATH, 'cascade', undefined);
-    expect(vecSpy).not.toHaveBeenCalled();
-    expect(likeSpy).toHaveBeenCalledTimes(1);
-    expect(found.length).toBe(1);
-  });
-
-  it('q + embedder OK + searchByVector throws → falls back + warns', async () => {
-    const { service, seedAgent, embedder, knowledgeRepo } = makeHarness();
-    seedAgent('alpha');
-    await service.create({
-      project: PROJECT_PATH,
-      agentSlug: 'alpha',
-      slug: 'one',
-      content: 'cascade body',
-    });
-    const vecSpy = jest
-      .spyOn(knowledgeRepo, 'searchByVector')
-      .mockImplementation(() => {
-        throw new Error('vec0 boom');
-      });
-    const likeSpy = jest.spyOn(knowledgeRepo, 'searchByContent');
-    const warnSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { warn: jest.Mock } }).logger,
-        'warn',
-      )
-      .mockImplementation(() => undefined);
-    embedder.embedWithProfile.mockResolvedValueOnce(embedded());
-    const found = await service.search(PROJECT_PATH, 'cascade', undefined);
-    expect(vecSpy).toHaveBeenCalledTimes(1);
-    expect(likeSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('vec0 boom'));
-    expect(found.length).toBe(1);
-  });
-
-  it('q + embedder OK + no fresh vectors for signature → falls back to LIKE', async () => {
+  it('q + embedder OK + no fresh vectors for signature → returns []', async () => {
     const { service, seedAgent, embedder, knowledgeRepo } = makeHarness();
     seedAgent('alpha');
     await service.create({
@@ -777,8 +602,50 @@ describe('KnowledgeService.search vector path', () => {
     const found = await service.search(PROJECT_PATH, 'cascade', undefined);
 
     expect(vecSpy).not.toHaveBeenCalled();
-    expect(likeSpy).toHaveBeenCalledTimes(1);
-    expect(found.map((r) => r.slug)).toEqual(['one']);
+    expect(likeSpy).not.toHaveBeenCalled();
+    expect(found).toEqual([]);
+  });
+
+  it('q + embedder error → propagates (no fallback)', async () => {
+    const { service, seedAgent, embedder, knowledgeRepo } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'one',
+      content: 'body',
+    });
+    const vecSpy = jest.spyOn(knowledgeRepo, 'searchByVector');
+    const likeSpy = jest.spyOn(knowledgeRepo, 'searchByContent');
+    embedder.embedWithProfile.mockRejectedValueOnce(
+      new EmbedderError('inprocess_load_failed', 'boom'),
+    );
+    await expect(
+      service.search(PROJECT_PATH, 'cascade', undefined),
+    ).rejects.toMatchObject({
+      name: 'EmbedderError',
+      reason: 'inprocess_load_failed',
+    });
+    expect(vecSpy).not.toHaveBeenCalled();
+    expect(likeSpy).not.toHaveBeenCalled();
+  });
+
+  it('q + embedder OK + searchByVector throws → propagates', async () => {
+    const { service, seedAgent, embedder, knowledgeRepo } = makeHarness();
+    seedAgent('alpha');
+    await service.create({
+      project: PROJECT_PATH,
+      agentSlug: 'alpha',
+      slug: 'one',
+      content: 'cascade body',
+    });
+    jest.spyOn(knowledgeRepo, 'searchByVector').mockImplementation(() => {
+      throw new Error('vec0 boom');
+    });
+    embedder.embedWithProfile.mockResolvedValueOnce(embedded());
+    await expect(
+      service.search(PROJECT_PATH, 'cascade', undefined),
+    ).rejects.toThrow('vec0 boom');
   });
 
   it('kind only (no q) → embedder NOT called; searchByContent called with query=undefined', async () => {
@@ -892,8 +759,8 @@ describe('KnowledgeService kind field', () => {
     expect(found[0].slug).toBe('a');
   });
 
-  it('search with q AND kind AND-combines', async () => {
-    const { service, seedAgent, embedder } = makeHarness();
+  it('search with q AND kind via vector path filters by kind', async () => {
+    const { service, seedAgent } = makeHarness();
     seedAgent('alpha');
     await service.create({
       project: PROJECT_PATH,
@@ -912,15 +779,11 @@ describe('KnowledgeService kind field', () => {
       project: PROJECT_PATH,
       agentSlug: 'alpha',
       slug: 'c',
-      content: 'unrelated',
+      content: 'binding',
       kind: 'fundamental',
     });
-    embedder.embedWithProfile.mockRejectedValueOnce(
-      new EmbedderError('inprocess_load_failed'),
-    );
     const found = await service.search(PROJECT_PATH, 'cascade', 'fundamental');
-    expect(found.length).toBe(1);
-    expect(found[0].slug).toBe('a');
+    expect(found.map((r) => r.slug).sort()).toEqual(['a', 'c']);
   });
 
   it('search with neither q nor kind throws invalid_query', async () => {
@@ -1127,7 +990,7 @@ describe('KnowledgeService vectorization', () => {
     ).toBe(0);
   });
 
-  it('embedder url_missing → swallowed (no throw)', async () => {
+  it('embedder inprocess_load_failed → swallowed (no throw)', async () => {
     const { service, seedAgent, embedder, db } = makeHarness();
     seedAgent('alpha');
     embedder.embedWithProfile.mockRejectedValueOnce(

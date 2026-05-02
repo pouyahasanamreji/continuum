@@ -96,9 +96,9 @@ What you get:
 | **api** | http://localhost:7776 | NestJS + MCP server. Swagger at `/docs`. Hot-reloaded on file change. |
 | **web** | http://localhost:7777 | Astro + React panel. Hot-reloaded. |
 | **sqlite-web** | http://localhost:7778 | Browser UI for the live SQLite database — inspect projects, agents, knowledge, vectors. Loads `sqlite-vec` automatically. |
-| **embedder** (optional) | http://localhost:8080 | Hugging Face TEI running `embeddinggemma-300m`. Off by default. |
+| **embedder** (optional) | http://localhost:8080 | Hugging Face TEI running an HTTP embedder. Off by default. |
 
-Turn the embedder on with the `embedder` profile when you want semantic search:
+The API embeds in-process by default (`Snowflake/snowflake-arctic-embed-m-v1.5` via Transformers.js, 768-dim, ONNX q8). No external service required for semantic search. Override via `EMBEDDER_URL` to point at any HTTP-based embedder (Ollama, TEI, OpenAI-compatible). Turn the bundled TEI container on with the `embedder` profile:
 
 ```bash
 HF_TOKEN=hf_xxx docker compose -f docker-compose.dev.yml --profile embedder up
@@ -150,8 +150,8 @@ knowledge_create({
 })
         │
         ▼
-content → embedder (Ollama / TEI)
-        │       embeddinggemma-300m → 768-dim vector
+content → embedder (in-process by default, or Ollama / TEI / OpenAI-compatible)
+        │       Snowflake Arctic Embed v1.5 → 768-dim vector
         ▼
 SQLite row + sqlite-vec index entry
         │       freshness profile = (URL, model, dim)
@@ -188,22 +188,24 @@ Vectors are pinned to a `(EMBEDDER_URL, EMBEDDER_MODEL, EMBEDDER_DIM)` triple. C
 
 ### Pluggable embedders
 
+The embedder is required and runs in-process by default (`Snowflake/snowflake-arctic-embed-m-v1.5`, 768-dim, ONNX q8). The model weights are bundled in the API image — no extra container, no extra config, semantic search works out of the box.
+
+Override via `EMBEDDER_URL` to delegate embedding to an HTTP service:
+
 ```bash
 # Option A — Ollama (simplest, fully local)
-ollama pull embeddinggemma
+ollama pull <embedding-model>
 # EMBEDDER_URL=http://127.0.0.1:11434/api/embed
-# EMBEDDER_MODEL=embeddinggemma   EMBEDDER_DIM=768
+# EMBEDDER_MODEL=<embedding-model>   EMBEDDER_DIM=768
 
 # Option B — Hugging Face TEI (production-grade, batched)
 HF_TOKEN=hf_xxx docker compose -f docker-compose.dev.yml --profile embedder up embedder
 # EMBEDDER_URL=http://127.0.0.1:8080/v1/embeddings
-# EMBEDDER_MODEL=google/embeddinggemma-300m   EMBEDDER_DIM=768
+# EMBEDDER_MODEL=<repo-id>   EMBEDDER_DIM=768
 
 # Option C — anything OpenAI-compatible /v1/embeddings
 # Works out of the box. Match the dim.
 ```
-
-No embedder configured? `knowledge_search` falls back to text-only matching. Still useful. Less magical. Add the embedder when you're ready.
 
 ### Built on `sqlite-vec`
 
@@ -431,8 +433,8 @@ Both env vars and panel settings supported. Panel takes precedence.
 | `ORCHESTRATOR_ALLOW_DESTRUCTIVE_MIGRATE` | _unset_ | Set `1` to override in production |
 | `ANTHROPIC_API_KEY` | _unset_ | Token-count endpoints (server-side only) |
 | `ANTHROPIC_TOKENIZER_MODEL` | `claude-opus-4-7` | Model name for `count_tokens` |
-| `EMBEDDER_URL` | _unset_ | Embedding endpoint — Ollama or OpenAI-compatible |
-| `EMBEDDER_MODEL` | `embeddinggemma` | Model sent to embedder |
+| `EMBEDDER_URL` | _unset_ | HTTP embedding endpoint (Ollama / TEI / OpenAI-compatible). Unset → in-process embedder |
+| `EMBEDDER_MODEL` | `Snowflake/snowflake-arctic-embed-m-v1.5` | Model id (in-process default; passed through to HTTP embedder when configured) |
 | `EMBEDDER_DIM` | `768` | Expected embedding dimension |
 
 ---
@@ -441,7 +443,7 @@ Both env vars and panel settings supported. Panel takes precedence.
 
 | Layer | Tech |
 |---|---|
-| **Memory** | `sqlite-vec` vector index • `embeddinggemma-300m` (default) • Ollama / TEI / OpenAI-compatible embedders • freshness-pinned vectors |
+| **Memory** | `sqlite-vec` vector index • Snowflake Arctic Embed v1.5 in-process via Transformers.js (default) • Ollama / TEI / OpenAI-compatible embedders via `EMBEDDER_URL` • freshness-pinned vectors |
 | API | NestJS 11 • `@rekog/mcp-nest` • `@modelcontextprotocol/sdk` 1.10 • Zod 4 • Swagger |
 | Persistence | `better-sqlite3` (WAL, FK, busy_timeout 5s) |
 | Diff engine | `diff` 9 (zero-fuzz unified-diff applier) |

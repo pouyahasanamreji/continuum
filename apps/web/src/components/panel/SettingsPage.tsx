@@ -420,7 +420,7 @@ export function SettingsPage() {
               )}
               {effective.embedderUrl === "unset" && form.embedderUrl === "" && (
                 <p className="text-xs text-muted-foreground">
-                  Knowledge will be saved without embeddings.
+                  Leave empty to use the bundled in-process embedder.
                 </p>
               )}
             </div>
@@ -432,11 +432,11 @@ export function SettingsPage() {
                 id="embedder-model"
                 value={form.embedderModel}
                 onChange={(e) => setForm({ embedderModel: e.target.value })}
-                placeholder="google/embeddinggemma-300m"
+                placeholder="Snowflake/snowflake-arctic-embed-m-v1.5"
               />
               <p className="text-xs text-muted-foreground">
-                TEI users should set <code>google/embeddinggemma-300m</code>. Ollama users can leave
-                this empty for the app default.
+                Set this when delegating to an HTTP embedder (TEI/Ollama/OpenAI-compatible).
+                Leave empty to use the in-process default.
               </p>
               {effective.embedderModel === "env" && form.embedderModel === "" && (
                 <p className="text-xs text-muted-foreground">
@@ -445,7 +445,7 @@ export function SettingsPage() {
               )}
               {effective.embedderModel === "default" && form.embedderModel === "" && (
                 <p className="text-xs text-muted-foreground">
-                  Defaults to <code>embeddinggemma</code>.
+                  Defaults to <code>Snowflake/snowflake-arctic-embed-m-v1.5</code>.
                 </p>
               )}
             </div>

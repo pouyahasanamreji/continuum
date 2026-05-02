@@ -237,7 +237,7 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
     return rows.map((r) => KnowledgeMapper.toDomain(r));
   }
 
-  // vec0 default distance metric is L2; embeddinggemma vectors are L2-normalized
+  // vec0 default distance metric is L2; embedder vectors are L2-normalized
   // so L2 ranking is cosine-equivalent. Distance is internal — caller gets Knowledge[].
   searchByVector(
     projectId: number,
