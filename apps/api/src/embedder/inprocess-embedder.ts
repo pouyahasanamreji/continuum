@@ -71,6 +71,12 @@ export class InprocessEmbedderService implements OnApplicationBootstrap {
       const mod = requireForTransformers(
         '@huggingface/transformers',
       ) as TransformersModule;
+      const cacheDir = process.env.TRANSFORMERS_CACHE;
+      if (cacheDir) {
+        (mod.env as { cacheDir: string }).cacheDir = cacheDir.endsWith('/')
+          ? cacheDir
+          : `${cacheDir}/`;
+      }
       const pipe = (await mod.pipeline(
         'feature-extraction',
         INPROCESS_EMBEDDER_MODEL_ID,
