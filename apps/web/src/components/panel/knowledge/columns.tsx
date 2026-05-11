@@ -2,7 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { ArrowUpDown, PencilIcon, TrashIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { KnowledgeFull } from "@/types/knowledge";
+import type { KnowledgeSummary } from "@/types/knowledge";
 
 const dateFmt = new Intl.DateTimeFormat(undefined, {
   dateStyle: "short",
@@ -30,20 +30,14 @@ function sortHeader(label: string) {
   );
 }
 
-function snippet(text: string): string {
-  const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length > 80 ? `${flat.slice(0, 80)}...` : flat;
-}
-
 export interface KnowledgeRowActions {
-  onEdit: (row: KnowledgeFull) => void;
-  onDelete: (row: KnowledgeFull) => void;
-  agentSlugById: (agentId: number) => string | null;
+  onEdit: (row: KnowledgeSummary) => void;
+  onDelete: (row: KnowledgeSummary) => void;
 }
 
 export function makeColumns(
   actions: KnowledgeRowActions,
-): ColumnDef<KnowledgeFull>[] {
+): ColumnDef<KnowledgeSummary>[] {
   return [
     {
       accessorKey: "slug",
@@ -57,25 +51,19 @@ export function makeColumns(
         row.original.slug.toLowerCase().includes(value.toLowerCase()),
     },
     {
+      accessorKey: "agentSlug",
       id: "agentSlug",
-      accessorFn: (row) => actions.agentSlugById(row.agentId) ?? "",
       header: sortHeader("Agent"),
-      cell: ({ row }) => {
-        const slug = actions.agentSlugById(row.original.agentId);
-        if (!slug)
-          return (
-            <span className="text-muted-foreground text-xs">
-              #{row.original.agentId}
-            </span>
-          );
-        return <span className="font-mono text-xs">{slug}</span>;
-      },
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.agentSlug}</span>
+      ),
       enableSorting: true,
       enableColumnFilter: true,
       filterFn: (row, _id, value: string) => {
         if (!value) return true;
-        const slug = actions.agentSlugById(row.original.agentId) ?? "";
-        return slug.toLowerCase().includes(value.toLowerCase());
+        return row.original.agentSlug
+          .toLowerCase()
+          .includes(value.toLowerCase());
       },
     },
     {
@@ -97,16 +85,6 @@ export function makeColumns(
         if (!value || value === "all") return true;
         return row.original.kind === value;
       },
-    },
-    {
-      id: "content",
-      header: "Snippet",
-      cell: ({ row }) => (
-        <span className="text-xs text-muted-foreground">
-          {snippet(row.original.content)}
-        </span>
-      ),
-      enableSorting: false,
     },
     {
       accessorFn: (row) => row.createdAt,

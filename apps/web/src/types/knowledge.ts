@@ -9,3 +9,11 @@ export interface KnowledgeFull {
   updatedAt: string;
   deletedAt: string | null;
 }
+
+export interface KnowledgeSummary {
+  slug: string;
+  kind: "fundamental" | "situational";
+  agentSlug: string;
+  createdAt: string;
+  updatedAt: string;
+}

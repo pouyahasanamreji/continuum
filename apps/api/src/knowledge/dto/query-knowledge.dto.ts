@@ -11,7 +11,10 @@ import { z } from 'zod';
 import { Knowledge } from '../domain/knowledge';
 import { KnowledgeKindEnum } from '../../knowledge-kinds/knowledge-kinds.enum';
 
-export const listKnowledgeDto = z.object({ project: z.string() });
+export const listKnowledgeDto = z.object({
+  project: z.string(),
+  kind: z.enum(['fundamental', 'situational']).optional(),
+});
 export type ListKnowledgeDto = z.infer<typeof listKnowledgeDto>;
 
 export const searchKnowledgeDto = z

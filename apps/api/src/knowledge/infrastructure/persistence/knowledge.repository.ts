@@ -2,6 +2,7 @@
 import { IPaginationOptions } from '../../../utils/types/pagination-options';
 import { KnowledgeKindEnum } from '../../../knowledge-kinds/knowledge-kinds.enum';
 import { Knowledge } from '../../domain/knowledge';
+import { KnowledgeSummary } from '../../domain/knowledge-summary';
 
 export interface KnowledgeCreatePayload {
   agentId: number;
@@ -41,11 +42,14 @@ export interface KnowledgeFindManyOptions {
 }
 
 export abstract class KnowledgeRepository {
-  abstract findAll(projectId: number): Knowledge[];
+  abstract findAll(
+    projectId: number,
+    opts?: { kind?: KnowledgeKindEnum },
+  ): KnowledgeSummary[];
   abstract findManyWithPagination(
     projectId: number,
     options: KnowledgeFindManyOptions,
-  ): Knowledge[];
+  ): KnowledgeSummary[];
   abstract findById(id: number): Knowledge | null;
   abstract findByProjectIdAndSlug(
     projectId: number,
@@ -62,14 +66,14 @@ export abstract class KnowledgeRepository {
     query: string | undefined,
     kind: KnowledgeKindEnum | undefined,
     limit: number,
-  ): Knowledge[];
+  ): KnowledgeSummary[];
   abstract searchByVector(
     projectId: number,
     queryEmbedding: number[],
     kind: KnowledgeKindEnum | undefined,
     limit: number,
     signature: string,
-  ): Knowledge[];
+  ): KnowledgeSummary[];
   abstract findAllForVectorize(
     mode: 'missing' | 'all',
     signature?: string,

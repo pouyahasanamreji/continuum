@@ -11,11 +11,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MarkdownBody } from "../MarkdownBody";
 import type { KnowledgeFull } from "@/types/knowledge";
 
 interface Props {
   knowledge: KnowledgeFull | null;
+  loading?: boolean;
   agentSlugById: (agentId: number) => string | null;
   onOpenChange: (open: boolean) => void;
 }
@@ -83,11 +85,13 @@ function MetadataList({
 
 export function KnowledgeDetailDialog({
   knowledge,
+  loading,
   agentSlugById,
   onOpenChange,
 }: Props) {
+  const open = knowledge !== null || Boolean(loading);
   return (
-    <Dialog open={knowledge !== null} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
@@ -96,7 +100,9 @@ export function KnowledgeDetailDialog({
           <DialogDescription>
             {knowledge
               ? `Recorded by agent #${knowledge.agentId}`
-              : "Select a lesson to view details."}
+              : loading
+                ? "Loading lesson..."
+                : "Select a lesson to view details."}
           </DialogDescription>
         </DialogHeader>
         {knowledge ? (
@@ -110,6 +116,11 @@ export function KnowledgeDetailDialog({
             <Section title="Content" defaultOpen>
               <MarkdownBody text={knowledge.content || "—"} />
             </Section>
+          </div>
+        ) : loading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-1/3" />
+            <Skeleton className="h-48 w-full" />
           </div>
         ) : null}
       </DialogContent>

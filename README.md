@@ -56,7 +56,7 @@ for **Claude Code**, **Codex**, **Cline**, and any MCP-speaking client.
 |  | |
 |---|---|
 | 🧠 **Vectorized memory** | Every lesson your agents learn becomes a 768-dim embedding indexed in `sqlite-vec`. Recall is semantic, fuzzy, and instant — no exact-match games. |
-| 🔍 **RAG-native search** | `knowledge_search({q: "how do we handle webhook retries?"})` returns the exact lesson, embedded, ranked, ready to ground the next prompt. |
+| 🔍 **RAG-native search** | `knowledge_search({q: "how do we handle webhook retries?"})` returns ranked metadata (slug + kind + agentSlug + timestamps); follow up with `knowledge_get({slug})` for the body. Metadata first keeps top-K context cheap; only fetch what's worth reading. |
 | 🗺️ **Canonical workflow** | Every project gets a PLOT.md seeded with a 4-phase dispatch protocol — Intake → Research → Verify → Handoff. Stop re-explaining your process. |
 | 🤖 **Multi-agent registry** | State machine + reserved-path tracking stops parallel agents from clobbering each other across git worktrees. |
 | 📚 **Two-tier knowledge** | `fundamental` lessons are binding rules loaded on every dispatch. `situational` lessons surface via semantic search when relevant. |
@@ -71,7 +71,7 @@ for **Claude Code**, **Codex**, **Cline**, and any MCP-speaking client.
 | Without Continuum | With Continuum |
 |---|---|
 | Session ends → context gone. | Lessons persist as embedded vectors. Recall survives reboots, models, and clients. |
-| You re-explain conventions every session. | `knowledge_search` retrieves the lesson before the agent plans. |
+| You re-explain conventions every session. | `knowledge_search` ranks lessons by relevance; `knowledge_get` pulls the body when needed. |
 | Two parallel agents edit the same file. | `reserved_paths` + status state machine surfaces collisions before dispatch. |
 | Each new task improvises orchestration. | PLOT.md protocol seeded into every project — Intake → Research → Verify → Handoff. |
 | "What did Claude do last week?" | `registry_list` shows every dispatch, status, plan, and merge SHA. |
@@ -164,14 +164,20 @@ forever queryable by ANY future agent on this project
 Phase 1 of every dispatch (the orchestrator does this automatically):
 
 ```
-knowledge_search({ project, kind: 'fundamental' })
-  └─ returns binding rules — base branch, worktree convention, no-AI-attribution, etc.
+knowledge_list({ project, kind: 'fundamental' })
+  └─ returns metadata for every binding lesson — slug + agentSlug + timestamps.
+knowledge_get({ project, slug })  // for each fundamental slug
+  └─ full body — base branch, worktree convention, no-AI-attribution, etc.
 
 knowledge_search({ project, q: "rate limit middleware nest interceptor order" })
   └─ vector similarity over your prose
-  └─ returns top-K lessons ranked by semantic closeness
+  └─ returns top-K ranked metadata (no content)
   └─ does NOT need exact wording — natural language works
+knowledge_get({ project, slug })  // for each relevant hit
+  └─ pulls the full lesson body
 ```
+
+Search and list return metadata only — slug + kind + agentSlug + timestamps. Call `knowledge_get` for the body of any lesson worth reading. Keeps top-K context cheap; the orchestrator triages first, fetches second.
 
 The result: the agent that's about to plan your task already knows what your last five agents learned the hard way. No prompt engineering. No "here's our convention" copy-paste.
 
@@ -274,9 +280,11 @@ When work merges, the orchestrator records what was learned via `knowledge_creat
 ### 1. Intake
 
 ```
-registry_list({project})                        // who's active, what paths reserved
-knowledge_search({project, kind:'fundamental'}) // binding rules — load every one
-knowledge_search({project, q: "<task intent>"}) // RAG over prior lessons
+registry_list({project})                      // who's active, what paths reserved
+knowledge_list({project, kind:'fundamental'}) // binding-rule metadata
+knowledge_get({project, slug})                // body per fundamental slug — read every one
+knowledge_search({project, q: "<task intent>"}) // RAG → ranked metadata
+knowledge_get({project, slug})                // body for each relevant hit
 ```
 
 ### 2. Research
@@ -338,14 +346,14 @@ Every tool takes `project` (canonical absolute path) as its first argument.
 
 | Tool | Purpose |
 |---|---|
-| `knowledge_list` | All lessons (slug, agentSlug, kind, timestamps) |
-| `knowledge_search` | Semantic query — `q` is free-text intent, optional `kind`, optional `limit` |
-| `knowledge_get` | Read one lesson by slug |
+| `knowledge_list` | Lesson metadata (slug, kind, agentSlug, timestamps). Optional `kind` filter. **No content.** |
+| `knowledge_search` | Semantic query → ranked metadata. `q` free-text intent, optional `kind`, optional `limit`. **No content.** |
+| `knowledge_get` | Read one lesson by slug — full body |
 | `knowledge_create` | Record a new lesson — `kind: 'fundamental' \| 'situational'`. Embedded automatically. |
 | `knowledge_update` | Replace lesson content. Re-embeds on save. |
 | `knowledge_delete` | Retire a lesson |
 
-`knowledge_search` runs hybrid lookup over the `sqlite-vec` index. Pass natural prose — questions, task statements, descriptions all work. SQL wildcard syntax does not.
+`knowledge_search` runs vector lookup over the `sqlite-vec` index. Pass natural prose — questions, task statements, descriptions all work. SQL wildcard syntax does not. Response is ranked metadata; call `knowledge_get({project, slug})` for the body of any hit worth reading. Same pattern for `knowledge_list` (use `kind: 'fundamental'` to enumerate the binding set, then get each).
 
 ### Agents
 
@@ -366,10 +374,13 @@ Allowed transitions: `draft → active → merged | abandoned`. `merged` require
 human: orchestrate adding rate-limit middleware to /api routes
 
 claude: → registry_list({project})           // 0 active
-        → knowledge_search({project, kind:'fundamental'})
-                                              // base-branch=main, worktree=../<slug>/
+        → knowledge_list({project, kind:'fundamental'})
+                                              // metadata for binding rules
+        → knowledge_get({project, slug:'base-branch'})       // → main
+        → knowledge_get({project, slug:'worktree-convention'}) // → ../<slug>/
         → knowledge_search({project, q:'rate limit middleware nest interceptor'})
-                                              // ✨ hits 2 prior lessons on guard ordering
+                                              // ✨ 2 ranked hits on guard ordering (metadata)
+        → knowledge_get({project, slug:'rate-limit-guard-ordering'}) // bodies fetched
         → spawn Plan subagent → plan returned
         → spawn critique subagent → 1 issue: missed `app.module.ts` registration → fixed
         → agent_create({
@@ -488,7 +499,7 @@ pnpm -F @continuum/web build        # astro build → dist/
 |---|---|
 | `project_not_found` | Passing a worktree path. Use the canonical project root registered with `project_create`. |
 | `hunk_mismatch` from `plot_update` | Stale diff. Re-read with `plot`, regenerate against current content, retry. |
-| `knowledge_search` returns empty / weird results | Embedder unreachable, model mismatch, or dim mismatch. Check `/settings`. Backfill stale vectors. |
+| `knowledge_search` / `knowledge_list` returns empty / weird results | Embedder unreachable, model mismatch, or dim mismatch (search only). Check `/settings`. Backfill stale vectors. Remember: both return metadata — call `knowledge_get({project, slug})` for the body. |
 | Vectors not regenerating after embedder swap | Freshness profile (URL + model + dim) must change. Restart server to trigger backfill. |
 | `invalid_transition` from `agent_update` | Allowed: `draft → active → merged \| abandoned`. Anything else throws. |
 | `missing_merged_commit` / `invalid_merged_commit` | `merged` requires a 7–40 char SHA. |

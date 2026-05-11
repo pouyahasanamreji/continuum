@@ -96,6 +96,43 @@ describe('knowledge_search MCP tool (e2e)', () => {
         kind: 'fundamental',
       });
       expect(env.isError).toBeFalsy();
+      const parsed = JSON.parse(env.content[0].text) as Array<
+        Record<string, unknown>
+      >;
+      expect(parsed.length).toBe(1);
+      expect(parsed[0].slug).toBe('binding-rule');
+      expect(parsed[0].kind).toBe('fundamental');
+      expect(parsed[0].agentSlug).toBe('alpha');
+      expect(parsed[0]).not.toHaveProperty('content');
+      expect(parsed[0]).not.toHaveProperty('id');
+      expect(parsed[0]).not.toHaveProperty('agentId');
+    });
+
+    it('knowledge_list returns metadata only (no content)', async () => {
+      const env = await callTool('knowledge_list', { project: projectPath });
+      expect(env.isError).toBeFalsy();
+      const parsed = JSON.parse(env.content[0].text) as Array<
+        Record<string, unknown>
+      >;
+      expect(parsed.length).toBeGreaterThan(0);
+      for (const row of parsed) {
+        expect(row).toHaveProperty('slug');
+        expect(row).toHaveProperty('kind');
+        expect(row).toHaveProperty('agentSlug');
+        expect(row).toHaveProperty('createdAt');
+        expect(row).toHaveProperty('updatedAt');
+        expect(row).not.toHaveProperty('content');
+        expect(row).not.toHaveProperty('id');
+        expect(row).not.toHaveProperty('agentId');
+      }
+    });
+
+    it('knowledge_list with kind:fundamental filters to fundamental rows only', async () => {
+      const env = await callTool('knowledge_list', {
+        project: projectPath,
+        kind: 'fundamental',
+      });
+      expect(env.isError).toBeFalsy();
       const parsed = JSON.parse(env.content[0].text) as Array<{
         slug: string;
         kind: string;

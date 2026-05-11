@@ -4,6 +4,7 @@ import { Injectable } from '@nestjs/common';
 import { OrchestratorDbService } from '../../../../../database/orchestrator-db.service';
 import { KnowledgeKindEnum } from '../../../../../knowledge-kinds/knowledge-kinds.enum';
 import { Knowledge } from '../../../../domain/knowledge';
+import { KnowledgeSummary } from '../../../../domain/knowledge-summary';
 import {
   KnowledgeCreatePayload,
   KnowledgeCreateResult,
@@ -12,16 +13,23 @@ import {
   KnowledgeUpdatePatch,
 } from '../../knowledge.repository';
 import { KnowledgeEntity } from '../entities/knowledge.entity';
-import { KnowledgeMapper } from '../mappers/knowledge.mapper';
+import {
+  KnowledgeMapper,
+  KnowledgeSummaryRow,
+} from '../mappers/knowledge.mapper';
 
 const ORDER_COLUMNS = {
-  id: 'id',
-  slug: 'slug',
-  agentId: 'agent_id',
-  kind: 'kind',
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
+  id: 'k.id',
+  slug: 'k.slug',
+  agentId: 'k.agent_id',
+  kind: 'k.kind',
+  createdAt: 'k.created_at',
+  updatedAt: 'k.updated_at',
 } as const;
+
+const SUMMARY_COLUMNS =
+  'k.slug AS slug, k.kind AS kind, a.slug AS agent_slug, ' +
+  'k.created_at AS created_at, k.updated_at AS updated_at';
 
 @Injectable()
 export class KnowledgeRelationalRepository extends KnowledgeRepository {
@@ -29,37 +37,48 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
     super();
   }
 
-  findAll(projectId: number): Knowledge[] {
+  findAll(
+    projectId: number,
+    opts?: { kind?: KnowledgeKindEnum },
+  ): KnowledgeSummary[] {
+    const where: string[] = ['k.project_id = ?', 'k.deleted_at IS NULL'];
+    const params: (string | number)[] = [projectId];
+    if (opts?.kind !== undefined) {
+      where.push('k.kind = ?');
+      params.push(opts.kind);
+    }
+    const sql =
+      `SELECT ${SUMMARY_COLUMNS} FROM knowledge k ` +
+      `JOIN agents a ON a.id = k.agent_id ` +
+      `WHERE ${where.join(' AND ')} ` +
+      `ORDER BY k.created_at DESC, k.id ASC`;
     const rows = this.dbs.db
-      .prepare<
-        [number],
-        KnowledgeEntity
-      >('SELECT * FROM knowledge WHERE project_id = ? AND deleted_at IS NULL ORDER BY created_at DESC, id ASC')
-      .all(projectId);
-    return rows.map((r) => KnowledgeMapper.toDomain(r));
+      .prepare<(string | number)[], KnowledgeSummaryRow>(sql)
+      .all(...params);
+    return rows.map((r) => KnowledgeMapper.toSummary(r));
   }
 
   findManyWithPagination(
     projectId: number,
     options: KnowledgeFindManyOptions,
-  ): Knowledge[] {
-    const where: string[] = ['project_id = ?', 'deleted_at IS NULL'];
+  ): KnowledgeSummary[] {
+    const where: string[] = ['k.project_id = ?', 'k.deleted_at IS NULL'];
     const params: (string | number)[] = [projectId];
     const f = options.filterOptions;
     if (f?.agentId !== undefined && f?.agentId !== null) {
-      where.push('agent_id = ?');
+      where.push('k.agent_id = ?');
       params.push(f.agentId);
     }
     if (f?.slug !== undefined && f?.slug !== null && f.slug !== '') {
-      where.push('slug LIKE ?');
+      where.push('k.slug LIKE ?');
       params.push(`%${f.slug}%`);
     }
     if (f?.kind !== undefined && f?.kind !== null) {
-      where.push('kind = ?');
+      where.push('k.kind = ?');
       params.push(f.kind);
     }
     if (f?.q !== undefined && f?.q !== null && f.q !== '') {
-      where.push('(slug LIKE ? OR content LIKE ?)');
+      where.push('(k.slug LIKE ? OR k.content LIKE ?)');
       params.push(`%${f.q}%`, `%${f.q}%`);
     }
 
@@ -74,17 +93,21 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
       }
     }
     const orderBy =
-      orderClauses.length > 0 ? orderClauses.join(', ') : 'id DESC';
+      orderClauses.length > 0 ? orderClauses.join(', ') : 'k.id DESC';
 
-    const sql = `SELECT * FROM knowledge WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT ? OFFSET ?`;
+    const sql =
+      `SELECT ${SUMMARY_COLUMNS} FROM knowledge k ` +
+      `JOIN agents a ON a.id = k.agent_id ` +
+      `WHERE ${where.join(' AND ')} ` +
+      `ORDER BY ${orderBy} LIMIT ? OFFSET ?`;
     const rows = this.dbs.db
-      .prepare<(string | number)[], KnowledgeEntity>(sql)
+      .prepare<(string | number)[], KnowledgeSummaryRow>(sql)
       .all(
         ...params,
         options.paginationOptions.limit,
         (options.paginationOptions.page - 1) * options.paginationOptions.limit,
       );
-    return rows.map((r) => KnowledgeMapper.toDomain(r));
+    return rows.map((r) => KnowledgeMapper.toSummary(r));
   }
 
   findById(id: number): Knowledge | null {
@@ -215,37 +238,39 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
     query: string | undefined,
     kind: KnowledgeKindEnum | undefined,
     limit: number,
-  ): Knowledge[] {
-    const where: string[] = ['project_id = ?', 'deleted_at IS NULL'];
+  ): KnowledgeSummary[] {
+    const where: string[] = ['k.project_id = ?', 'k.deleted_at IS NULL'];
     const params: (string | number)[] = [projectId];
     if (query !== undefined) {
       const pattern = `%${query}%`;
-      where.push('(content LIKE ? OR slug LIKE ?)');
+      where.push('(k.content LIKE ? OR k.slug LIKE ?)');
       params.push(pattern, pattern);
     }
     if (kind !== undefined) {
-      where.push('kind = ?');
+      where.push('k.kind = ?');
       params.push(kind);
     }
     const sql =
-      `SELECT * FROM knowledge WHERE ${where.join(' AND ')} ` +
-      `ORDER BY created_at DESC, id ASC LIMIT ?`;
+      `SELECT ${SUMMARY_COLUMNS} FROM knowledge k ` +
+      `JOIN agents a ON a.id = k.agent_id ` +
+      `WHERE ${where.join(' AND ')} ` +
+      `ORDER BY k.created_at DESC, k.id ASC LIMIT ?`;
     params.push(limit);
     const rows = this.dbs.db
-      .prepare<(string | number)[], KnowledgeEntity>(sql)
+      .prepare<(string | number)[], KnowledgeSummaryRow>(sql)
       .all(...params);
-    return rows.map((r) => KnowledgeMapper.toDomain(r));
+    return rows.map((r) => KnowledgeMapper.toSummary(r));
   }
 
   // vec0 default distance metric is L2; embedder vectors are L2-normalized
-  // so L2 ranking is cosine-equivalent. Distance is internal — caller gets Knowledge[].
+  // so L2 ranking is cosine-equivalent. Distance is internal — caller gets summaries.
   searchByVector(
     projectId: number,
     queryEmbedding: number[],
     kind: KnowledgeKindEnum | undefined,
     limit: number,
     signature: string,
-  ): Knowledge[] {
+  ): KnowledgeSummary[] {
     // Overfetch from vec0 because top-K runs BEFORE the post-JOIN project/kind filter.
     const K_VEC = Math.min(200, Math.max(50, limit * 5 + 20));
     const buf = Buffer.from(new Float32Array(queryEmbedding).buffer);
@@ -267,16 +292,17 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
       params.push(kind);
     }
     const sql =
-      `SELECT k.* FROM knowledge_vec kv ` +
+      `SELECT ${SUMMARY_COLUMNS} FROM knowledge_vec kv ` +
       `JOIN knowledge k ON k.id = kv.knowledge_id ` +
+      `JOIN agents a ON a.id = k.agent_id ` +
       `WHERE ${where.join(' AND ')} ` +
       `ORDER BY kv.distance ` +
       `LIMIT ?`;
     params.push(limit);
     const rows = this.dbs.db
-      .prepare<(Buffer | number | string)[], KnowledgeEntity>(sql)
+      .prepare<(Buffer | number | string)[], KnowledgeSummaryRow>(sql)
       .all(...params);
-    return rows.map((r) => KnowledgeMapper.toDomain(r));
+    return rows.map((r) => KnowledgeMapper.toSummary(r));
   }
 
   countFreshForSearch(

@@ -10,13 +10,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { deleteRequest, withProject } from "@/lib/api";
-import type { KnowledgeFull } from "@/types/knowledge";
+import type { KnowledgeSummary } from "@/types/knowledge";
 
 interface Props {
-  knowledge: KnowledgeFull | null;
+  knowledge: KnowledgeSummary | null;
   project: string;
   onOpenChange: (open: boolean) => void;
-  onDeleted: (knowledge: KnowledgeFull) => void;
+  onDeleted: (knowledge: KnowledgeSummary) => void;
 }
 
 export function DeleteKnowledgeAlert({

@@ -26,13 +26,17 @@ path — or the service throws \`project_not_found\`.
 
 This document is project-agnostic. Project-specific facts (base
 branch name, worktree-naming convention, shared-file names,
-reference modules) live as knowledge lessons. Treat
-\`knowledge_search\` as RAG-style semantic retrieval: \`q\` is
-free-text intent, not SQL pattern syntax, and may be a full
-natural-language question, task statement, or detailed description.
-Load fundamentals with
-\`knowledge_search({project, kind: 'fundamental'})\`. Use \`q\` for
-topical relevance, optionally with \`kind: 'situational'\`.
+reference modules) live as knowledge lessons. \`knowledge_list\`
+and \`knowledge_search\` return **metadata only** — array of
+\`{slug, kind, agentSlug, createdAt, updatedAt}\`, no body. Call
+\`knowledge_get({project, slug})\` for the full content of any
+lesson worth reading. Treat \`knowledge_search\` as RAG-style
+semantic retrieval: \`q\` is free-text intent, not SQL pattern
+syntax, and may be a full natural-language question, task
+statement, or detailed description. Load fundamentals with
+\`knowledge_list({project, kind: 'fundamental'})\` then
+\`knowledge_get\` per slug. Use \`knowledge_search\` with \`q\`
+for topical relevance, optionally with \`kind: 'situational'\`.
 
 ## Workflow
 
@@ -46,17 +50,19 @@ Every human-given task runs through four phases.
   \`abandoned\`). For collision purposes, filter to
   \`status === 'active'\`. Drill into any specific agent with
   \`agent_get({project, slug})\`.
-- Call \`knowledge_list({project})\` to enumerate accumulated lessons
-  (slug, agentId, content, timestamps).
-- Call \`knowledge_search({project, kind: 'fundamental'})\` to load
-  every fundamental lesson for this project. These are binding
-  rules that apply to every dispatch — read in full before any
+- Call \`knowledge_list({project})\` to enumerate accumulated
+  lesson metadata (slug, agentSlug, kind, timestamps).
+- Call \`knowledge_list({project, kind: 'fundamental'})\` to enumerate
+  every fundamental lesson. These are binding rules that apply to
+  every dispatch. Follow with \`knowledge_get({project, slug})\` for
+  each returned slug — read every fundamental in full before any
   other phase-1 work.
 - Call \`knowledge_search({project, q})\` with a natural-language
   RAG query drawn from the human task: include relevant modules,
   files, errors, concepts, and intent. Do not use SQL wildcard syntax.
-  Each hit is a situational lesson likely relevant to the new work.
-  Read every hit before Phase 2.
+  The response is ranked metadata. For each hit that looks relevant,
+  call \`knowledge_get({project, slug})\` to read the full lesson body
+  before Phase 2.
 - If no agents are active, say so explicitly.
 - Ask clarifying questions **only** when a conflict cannot be
   resolved without human input. Otherwise proceed.
@@ -68,8 +74,9 @@ Every human-given task runs through four phases.
 - The research agent produces a detailed, best-practice
   implementation plan. It must:
   - Read the project conventions surfaced by \`knowledge_list\` /
-    \`knowledge_search\` and any reference files / modules they
-    point at.
+    \`knowledge_search\` (metadata) — call \`knowledge_get\` for the
+    bodies of relevant slugs — and any reference files / modules
+    they point at.
   - Enumerate every file to **create**, **modify**, or **delete**.
   - Identify shared files (append-only registries, generated
     artifacts, shared hook/util files, etc.).
@@ -148,7 +155,7 @@ dispatches.
 
 - **Worktrees** live as siblings of the primary checkout. Naming
   follows the project's worktree convention (recorded in knowledge —
-  read via \`knowledge_list\`).
+  list via \`knowledge_list\` and read each body via \`knowledge_get\`).
 - **Branch names** follow task intent — descriptive prefixes
   such as \`feature/refactor-<module>\`,
   \`feature/add-<feature>\`.
@@ -187,9 +194,9 @@ service. There are no \`.orchestrator/\` files to read or write.
 | Inspect one agent | \`agent_get({project, slug})\` |
 | Create new dispatch record | \`agent_create({project, slug, branch, worktree, reservedPaths, request, plan, implPrompt, coordinationBrief})\` |
 | Update agent (status, paths, notes) | \`agent_update({project, slug, ...})\` |
-| List knowledge lessons | \`knowledge_list({project})\` |
-| Search lessons | \`knowledge_search({project, q?, kind?, limit?})\` |
-| Read one lesson | \`knowledge_get({project, slug})\` |
+| List knowledge lesson metadata | \`knowledge_list({project, kind?})\` |
+| Search lesson metadata (semantic) | \`knowledge_search({project, q?, kind?, limit?})\` |
+| Read one lesson (full body) | \`knowledge_get({project, slug})\` |
 | Record a new lesson | \`knowledge_create({project, agentSlug, slug, content, kind?})\` |
 | Edit a lesson | \`knowledge_update({project, slug, content?, agentSlug?, kind?})\` |
 | Retire a lesson | \`knowledge_delete({project, slug})\` |
@@ -197,7 +204,12 @@ service. There are no \`.orchestrator/\` files to read or write.
 \`knowledge_search\` \`q\` is a RAG-style semantic query. Normal prose,
 full questions, task statements, and detailed descriptions are valid.
 At least one of \`q\` or \`kind\` is required; \`kind\` may be supplied
-alone or with \`q\`. Do not use SQL wildcard syntax.
+alone or with \`q\`. Do not use SQL wildcard syntax. The response is
+ranked metadata (\`slug + kind + agentSlug + timestamps\`); call
+\`knowledge_get({project, slug})\` per hit to read the full body.
+For the full fundamental set, use
+\`knowledge_list({project, kind: 'fundamental'})\` (also metadata)
+followed by \`knowledge_get\` per slug.
 
 \`plot_update\` applies unified-diff patches with **zero fuzz**.
 Diff headers are validated by exact regex — both header lines
@@ -231,13 +243,17 @@ Before planning any new dispatch, the orchestrator calls:
 2. \`agent_get({project, slug})\` — drill into specific agents
    when collision details matter.
 3. \`knowledge_list({project})\` — to enumerate every recorded
-   lesson (slug + agentSlug + kind + timestamps).
-4. \`knowledge_search({project, kind: 'fundamental'})\` — load every
-   fundamental lesson. Binding rules; read in full.
+   lesson's metadata (slug + agentSlug + kind + timestamps). No body.
+4. \`knowledge_list({project, kind: 'fundamental'})\` — every
+   fundamental lesson's metadata. For each returned slug call
+   \`knowledge_get({project, slug})\` to read the full body. These
+   are binding rules; read every one in full.
 5. \`knowledge_search({project, q})\` with one or more RAG-style
    free-text queries from the human task. \`q\` can be a full
    natural-language question, task statement, or detailed description.
-   Surface every matching situational lesson before planning research.
+   Response is ranked metadata. For every relevant hit call
+   \`knowledge_get({project, slug})\` to read the full lesson body
+   before planning research.
 
 No dispatch without a fresh reading.
 

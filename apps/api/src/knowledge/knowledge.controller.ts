@@ -22,6 +22,7 @@ import {
 } from '@nestjs/swagger';
 import { KnowledgeService } from './knowledge.service';
 import { Knowledge } from './domain/knowledge';
+import { KnowledgeSummary } from './domain/knowledge-summary';
 import { CreateKnowledgeDto } from './dto/create-knowledge.dto';
 import { UpdateKnowledgeDto } from './dto/update-knowledge.dto';
 import { QueryKnowledgeDto } from './dto/query-knowledge.dto';
@@ -52,10 +53,10 @@ export class KnowledgeController {
 
   @Get('knowledge')
   @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ type: InfinityPaginationResponse(Knowledge) })
+  @ApiOkResponse({ type: InfinityPaginationResponse(KnowledgeSummary) })
   listKnowledge(
     @Query() query: QueryKnowledgeDto,
-  ): InfinityPaginationResponseDto<Knowledge> {
+  ): InfinityPaginationResponseDto<KnowledgeSummary> {
     if (!query.project) missingProject();
     try {
       const page = query?.page ?? 1;
@@ -75,13 +76,13 @@ export class KnowledgeController {
   @ApiQuery({ name: 'q', type: String, required: false })
   @ApiQuery({ name: 'kind', enum: KnowledgeKindEnum, required: false })
   @ApiQuery({ name: 'limit', type: Number, required: false })
-  @ApiOkResponse({ type: Knowledge, isArray: true })
+  @ApiOkResponse({ type: KnowledgeSummary, isArray: true })
   async searchKnowledge(
     @Query('project') project?: string,
     @Query('q') q?: string,
     @Query('kind') kind?: string,
     @Query('limit') limit?: string,
-  ): Promise<Knowledge[]> {
+  ): Promise<KnowledgeSummary[]> {
     if (!project) missingProject();
     if (!q && !kind) {
       throw new UnprocessableEntityException({

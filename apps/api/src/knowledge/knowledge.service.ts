@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Knowledge } from './domain/knowledge';
+import { KnowledgeSummary } from './domain/knowledge-summary';
 import { KnowledgeServiceError } from '../common/errors/service-errors';
 import { SLUG_RE } from '../common/slug';
 import { KnowledgeKindEnum } from '../knowledge-kinds/knowledge-kinds.enum';
@@ -58,12 +59,12 @@ export class KnowledgeService {
     return agent.id;
   }
 
-  list(projectPath: string): Knowledge[] {
+  list(projectPath: string, kind?: KnowledgeKindEnum): KnowledgeSummary[] {
     const projectId = this.resolveProjectIdOrThrow(projectPath);
-    return this.repo.findAll(projectId);
+    return this.repo.findAll(projectId, kind ? { kind } : undefined);
   }
 
-  findManyWithPagination(query: QueryKnowledgeDto): Knowledge[] {
+  findManyWithPagination(query: QueryKnowledgeDto): KnowledgeSummary[] {
     const projectId = this.resolveProjectIdOrThrow(query.project);
     const filters = query.filters ?? null;
     const trimmedQ = query.q?.trim() ?? '';
@@ -248,7 +249,7 @@ export class KnowledgeService {
     query: string | undefined,
     kind: KnowledgeKindEnum | undefined,
     limit?: number,
-  ): Promise<Knowledge[]> {
+  ): Promise<KnowledgeSummary[]> {
     if (query === undefined && kind === undefined) {
       throw new KnowledgeServiceError('invalid_query', 'q or kind required');
     }
