@@ -9,11 +9,11 @@ services:
     container_name: continuum-api-dev
     init: true
     ports:
-      - "127.0.0.1:7776:7776"
+      - "127.0.0.1:6665:6665"
     environment:
       NODE_ENV: development
-      PORT: "7776"
-      CORS_ORIGIN: "http://localhost:7777,http://127.0.0.1:7777"
+      PORT: "6665"
+      CORS_ORIGIN: "http://localhost:6666,http://127.0.0.1:6666"
       ORCHESTRATOR_DB_PATH: /repo/.local-data/dev-orchestrator.db
       PANEL_REST_ENABLED: "true"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
@@ -25,7 +25,7 @@ services:
       - api_node_modules_root:/repo/node_modules
       - api_node_modules_api:/repo/apps/api/node_modules
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:7776/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:6665/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -39,7 +39,7 @@ services:
     container_name: continuum-sqlite-web-dev
     init: true
     ports:
-      - "127.0.0.1:7778:8080"
+      - "127.0.0.1:6667:6667"
     command:
       - sh
       - -lc
@@ -55,7 +55,7 @@ services:
           echo "sqlite-vec extension not found for $${sqlite_vec_pkg}; start the api service first so node_modules is populated." >&2
           exit 1
         fi
-        exec sqlite_web -H 0.0.0.0 -x -e "$${sqlite_vec_ext}" /data/dev-orchestrator.db
+        exec sqlite_web -H 0.0.0.0 -p 6667 -x -e "$${sqlite_vec_ext}" /data/dev-orchestrator.db
     volumes:
       - api_node_modules_root:/repo/node_modules:ro
       - ./.local-data:/data
@@ -71,11 +71,16 @@ services:
     depends_on:
       api:
         condition: service_started
+    command:
+      - sh
+      - -lc
+      - |
+        cd /repo && pnpm install --frozen-lockfile && pnpm --filter @continuum/web dev -- --host 0.0.0.0 --port 6666
     ports:
-      - "127.0.0.1:7777:7777"
+      - "127.0.0.1:6666:6666"
     environment:
       NODE_ENV: development
-      PUBLIC_API_BASE_URL: "http://127.0.0.1:7776"
+      PUBLIC_API_BASE_URL: "http://127.0.0.1:6665"
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "400"
     volumes:
@@ -83,7 +88,7 @@ services:
       - web_node_modules_root:/repo/node_modules
       - web_node_modules_web:/repo/apps/web/node_modules
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:7777/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:6666/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 3s
       retries: 5
