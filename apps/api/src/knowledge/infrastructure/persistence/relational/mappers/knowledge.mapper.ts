@@ -17,6 +17,7 @@ export class KnowledgeMapper {
     k.id = raw.id;
     k.projectId = raw.project_id;
     k.agentId = raw.agent_id;
+    k.agentSlug = raw.agent_slug;
     k.slug = raw.slug;
     k.content = raw.content;
     k.kind = raw.kind as KnowledgeKindEnum;

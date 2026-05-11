@@ -2,6 +2,7 @@
 // boilerplate's Promise-returning ports.
 import { IPaginationOptions } from '../../../utils/types/pagination-options';
 import { Agent } from '../../domain/agent';
+import { AgentSummary } from '../../domain/agent-summary';
 import { AgentStatusEnum } from '../../../agent-statuses/agent-statuses.enum';
 
 export interface AgentCreatePayload {
@@ -30,16 +31,27 @@ export interface AgentUpdatePatch {
   updatedAt: number;
 }
 
+export interface AgentListOptions {
+  status?: AgentStatusEnum;
+}
+
+export interface AgentFindManyOptions extends IPaginationOptions {
+  status?: AgentStatusEnum;
+}
+
 export type AgentCreateResult =
   | { ok: true; agent: Agent }
   | { ok: false; reason: 'slug_conflict' };
 
 export abstract class AgentRepository {
-  abstract findAll(projectId: number): Agent[];
+  abstract findAll(
+    projectId: number,
+    options?: AgentListOptions,
+  ): AgentSummary[];
   abstract findManyWithPagination(
     projectId: number,
-    options: IPaginationOptions,
-  ): Agent[];
+    options: AgentFindManyOptions,
+  ): AgentSummary[];
   abstract findById(id: number): Agent | null;
   abstract findByProjectIdAndSlug(
     projectId: number,

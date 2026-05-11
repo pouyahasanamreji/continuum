@@ -11,19 +11,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { API_BASE, getJson, withProject } from "@/lib/api";
 import { withBase } from "@/lib/base-path";
 import { useActiveProject } from "@/lib/use-active-project";
-import type { AgentFull, AgentStatus } from "@/types/agent";
+import type { AgentStatus, AgentSummary } from "@/types/agent";
 
 const STATUSES: AgentStatus[] = ["draft", "active", "merged", "abandoned"];
 const MCP_URL = `${API_BASE}/mcp`;
 
 interface PaginatedAgents {
-  data: AgentFull[];
+  data: AgentSummary[];
   hasNextPage: boolean;
 }
 
 export function Dashboard() {
   const activeProject = useActiveProject();
-  const [agents, setAgents] = useState<AgentFull[] | null>(null);
+  const [agents, setAgents] = useState<AgentSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 

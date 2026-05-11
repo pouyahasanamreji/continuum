@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Card,
   CardContent,
@@ -7,23 +7,24 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "./agents/data-table";
-import { columns } from "./agents/columns";
+import { makeAgentColumns } from "./agents/columns";
 import { AgentDetailDialog } from "./AgentDetailDialog";
 import { TablePagination } from "./TablePagination";
-import { getPaginatedJson, withProject } from "@/lib/api";
+import { getJson, getPaginatedJson, withProject } from "@/lib/api";
 import { withBase } from "@/lib/base-path";
 import { useActiveProject } from "@/lib/use-active-project";
-import type { AgentFull } from "@/types/agent";
+import type { AgentFull, AgentSummary } from "@/types/agent";
 
 const PAGE_SIZE = 10;
 
 export function AgentsPage() {
   const activeProject = useActiveProject();
-  const [agents, setAgents] = useState<AgentFull[] | null>(null);
+  const [agents, setAgents] = useState<AgentSummary[] | null>(null);
   const [page, setPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<AgentFull | null>(null);
+  const [selectedLoading, setSelectedLoading] = useState(false);
   const projectPageKeyRef = useRef<string | null>(null);
   const emptyNextFromPageRef = useRef<number | null>(null);
 
@@ -54,7 +55,7 @@ export function AgentsPage() {
     let cancelled = false;
     setAgents(null);
     setError(null);
-    getPaginatedJson<AgentFull>(
+    getPaginatedJson<AgentSummary>(
       withProject(
         `/api/orchestrator/agents?page=${page}&limit=${PAGE_SIZE}`,
         activeProject,
@@ -82,6 +83,29 @@ export function AgentsPage() {
       cancelled = true;
     };
   }, [activeProject, page]);
+
+  const columns = useMemo(
+    () => makeAgentColumns(activeProject ?? ""),
+    [activeProject],
+  );
+
+  const openRow = async (row: AgentSummary) => {
+    if (!activeProject) return;
+    setSelectedLoading(true);
+    try {
+      const full = await getJson<AgentFull>(
+        withProject(
+          `/api/orchestrator/agents/${encodeURIComponent(row.slug)}`,
+          activeProject,
+        ),
+      );
+      setSelected(full);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSelectedLoading(false);
+    }
+  };
 
   if (!activeProject) {
     return (
@@ -127,7 +151,11 @@ export function AgentsPage() {
   return (
     <>
       <div>
-        <DataTable columns={columns} data={agents} onRowClick={setSelected} />
+        <DataTable
+          columns={columns}
+          data={agents}
+          onRowClick={(row) => void openRow(row)}
+        />
         <TablePagination
           page={page}
           pageSize={PAGE_SIZE}
@@ -139,6 +167,7 @@ export function AgentsPage() {
       </div>
       <AgentDetailDialog
         agent={selected}
+        loading={selectedLoading}
         onOpenChange={(open) => !open && setSelected(null)}
       />
     </>

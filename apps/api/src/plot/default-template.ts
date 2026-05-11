@@ -45,11 +45,15 @@ Every human-given task runs through four phases.
 ### 1. Intake
 
 - Capture the task verbatim from the human.
-- Call \`registry_list({project})\`. The response includes ALL
-  agents (\`draft\` / \`active\` / \`merged\` /
-  \`abandoned\`). For collision purposes, filter to
-  \`status === 'active'\`. Drill into any specific agent with
-  \`agent_get({project, slug})\`.
+- Call \`registry_list({project, status: 'active'})\` to enumerate
+  every in-flight agent's metadata (slug, status, branch, worktree,
+  reservedPaths, timestamps). Response is paginated:
+  \`{data, page, limit, hasNextPage}\`. If \`hasNextPage\` is true,
+  increment \`page\` and call again until every active row is loaded.
+  Sweep the unioned \`reservedPaths\` for collision. To inspect every
+  status, drop the filter. Drill into any specific agent with
+  \`agent_get({project, slug})\` for the full record (request, plan,
+  implPrompt, coordinationBrief, postMergeNotes).
 - Call \`knowledge_list({project})\` to enumerate accumulated
   lesson metadata (slug, agentSlug, kind, timestamps).
 - Call \`knowledge_list({project, kind: 'fundamental'})\` to enumerate
@@ -91,8 +95,10 @@ Every human-given task runs through four phases.
   - Challenge every file touched — is each one necessary?
   - Look for missed files, orphaned imports, broken call sites.
   - Cross-check collisions against every active agent's reserved
-    paths (re-fetched via \`registry_list\` filtered to
-    \`active\`, plus \`agent_get({project, slug})\` for detail).
+    paths (re-fetched via \`registry_list({project, status: 'active'})\`,
+    paging through with \`page\` until \`hasNextPage\` is false; call
+    \`agent_get({project, slug})\` per agent when collision detail
+    matters beyond what the summary carries).
   - Confirm surgical-change discipline is respected, or explain
     why a deliberate departure is warranted.
   - Return a revised plan with annotated deltas.
@@ -190,8 +196,8 @@ service. There are no \`.orchestrator/\` files to read or write.
 | --- | --- |
 | Read this protocol | \`plot({project})\` |
 | Edit this protocol | \`plot_update({project, diff})\` |
-| List agents (collision matrix) | \`registry_list({project})\` |
-| Inspect one agent | \`agent_get({project, slug})\` |
+| List agent metadata (collision matrix) | \`registry_list({project, status?, page?, limit?})\` |
+| Inspect one agent (full body) | \`agent_get({project, slug})\` |
 | Create new dispatch record | \`agent_create({project, slug, branch, worktree, reservedPaths, request, plan, implPrompt, coordinationBrief})\` |
 | Update agent (status, paths, notes) | \`agent_update({project, slug, ...})\` |
 | List knowledge lesson metadata | \`knowledge_list({project, kind?})\` |
@@ -234,14 +240,26 @@ current content, retry. Never invent context.
 Note: \`knowledge_update\` is whole-content replace; pass the full
 new \`content\`. There is no diff format for lesson edits.
 
+\`registry_list\` returns paginated metadata
+(\`{data, page, limit, hasNextPage}\`). Each \`data\` row carries
+\`slug, status, branch, worktree, reservedPaths\`, plus timestamps
+and \`mergedCommit\` / \`abandonedReason\`. The artifact bodies —
+\`request\`, \`plan\`, \`implPrompt\`, \`coordinationBrief\`,
+\`postMergeNotes\` — are NOT in the summary; call
+\`agent_get({project, slug})\` to load them. Default \`limit\` is 10
+(max 50). Pass \`status\` to filter; pass \`page\` (1-indexed) to walk.
+
 ### Mandatory reads at Phase 1 Intake
 
 Before planning any new dispatch, the orchestrator calls:
 
-1. \`registry_list({project})\` — to enumerate agents and the
-   paths each \`active\` row reserves.
+1. \`registry_list({project, status: 'active'})\` — to enumerate
+   active agents and the paths each reserves. Response is paginated
+   metadata (\`{data, page, limit, hasNextPage}\`); page through until
+   \`hasNextPage\` is false. Drop \`status\` to sweep every record.
 2. \`agent_get({project, slug})\` — drill into specific agents
-   when collision details matter.
+   when collision details matter (request, plan, implPrompt,
+   coordinationBrief, postMergeNotes — none present on summary).
 3. \`knowledge_list({project})\` — to enumerate every recorded
    lesson's metadata (slug + agentSlug + kind + timestamps). No body.
 4. \`knowledge_list({project, kind: 'fundamental'})\` — every

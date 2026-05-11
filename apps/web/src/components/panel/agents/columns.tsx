@@ -8,7 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { AgentFull, AgentStatus } from "@/types/agent";
+import type { AgentSummary, AgentStatus } from "@/types/agent";
 import { CopyPromptButton } from "./CopyPromptButton";
 
 const dateFmt = new Intl.DateTimeFormat(undefined, {
@@ -45,103 +45,105 @@ function sortHeader(label: string) {
   );
 }
 
-export const columns: ColumnDef<AgentFull>[] = [
-  {
-    accessorKey: "slug",
-    header: sortHeader("Slug"),
-    cell: ({ row }) => (
-      <span className="font-mono text-sm">{row.original.slug}</span>
-    ),
-    enableSorting: true,
-    enableColumnFilter: true,
-    filterFn: (row, _id, value: string) =>
-      row.original.slug.toLowerCase().includes(value.toLowerCase()),
-  },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => (
-      <Badge variant={statusVariant(row.original.status)}>
-        {row.original.status}
-      </Badge>
-    ),
-    enableColumnFilter: true,
-    filterFn: (row, _id, value: string) => {
-      if (!value) return true;
-      return row.original.status === value;
+export function makeAgentColumns(project: string): ColumnDef<AgentSummary>[] {
+  return [
+    {
+      accessorKey: "slug",
+      header: sortHeader("Slug"),
+      cell: ({ row }) => (
+        <span className="font-mono text-sm">{row.original.slug}</span>
+      ),
+      enableSorting: true,
+      enableColumnFilter: true,
+      filterFn: (row, _id, value: string) =>
+        row.original.slug.toLowerCase().includes(value.toLowerCase()),
     },
-  },
-  {
-    accessorKey: "branch",
-    header: sortHeader("Branch"),
-    cell: ({ row }) => (
-      <span className="font-mono text-xs">{row.original.branch}</span>
-    ),
-  },
-  {
-    id: "reservedPaths",
-    header: "Reserved",
-    cell: ({ row }) => {
-      const paths = row.original.reservedPaths;
-      const count = paths.length;
-      if (count === 0)
-        return <span className="text-muted-foreground text-xs">—</span>;
-      return (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge variant="secondary" className="cursor-default">
-                {count}
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              <ul className="text-xs">
-                {paths.map((p) => (
-                  <li key={p} className="font-mono">
-                    {p}
-                  </li>
-                ))}
-              </ul>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      );
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => (
+        <Badge variant={statusVariant(row.original.status)}>
+          {row.original.status}
+        </Badge>
+      ),
+      enableColumnFilter: true,
+      filterFn: (row, _id, value: string) => {
+        if (!value) return true;
+        return row.original.status === value;
+      },
     },
-  },
-  {
-    accessorFn: (row) => row.createdAt,
-    id: "createdAt",
-    header: sortHeader("Created"),
-    cell: ({ row }) => (
-      <span className="text-xs">
-        {dateFmt.format(new Date(row.original.createdAt))}
-      </span>
-    ),
-    sortingFn: (a, b) =>
-      new Date(a.original.createdAt).getTime() -
-      new Date(b.original.createdAt).getTime(),
-  },
-  {
-    accessorFn: (row) => row.updatedAt,
-    id: "updatedAt",
-    header: sortHeader("Updated"),
-    cell: ({ row }) => (
-      <span className="text-xs">
-        {dateFmt.format(new Date(row.original.updatedAt))}
-      </span>
-    ),
-    sortingFn: (a, b) =>
-      new Date(a.original.updatedAt).getTime() -
-      new Date(b.original.updatedAt).getTime(),
-  },
-  {
-    id: "actions",
-    header: () => null,
-    enableSorting: false,
-    enableHiding: false,
-    cell: ({ row }) =>
-      row.original.status === "draft" ? (
-        <CopyPromptButton implPrompt={row.original.implPrompt} />
-      ) : null,
-  },
-];
+    {
+      accessorKey: "branch",
+      header: sortHeader("Branch"),
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">{row.original.branch}</span>
+      ),
+    },
+    {
+      id: "reservedPaths",
+      header: "Reserved",
+      cell: ({ row }) => {
+        const paths = row.original.reservedPaths;
+        const count = paths.length;
+        if (count === 0)
+          return <span className="text-muted-foreground text-xs">—</span>;
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="cursor-default">
+                  {count}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <ul className="text-xs">
+                  {paths.map((p) => (
+                    <li key={p} className="font-mono">
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      },
+    },
+    {
+      accessorFn: (row) => row.createdAt,
+      id: "createdAt",
+      header: sortHeader("Created"),
+      cell: ({ row }) => (
+        <span className="text-xs">
+          {dateFmt.format(new Date(row.original.createdAt))}
+        </span>
+      ),
+      sortingFn: (a, b) =>
+        new Date(a.original.createdAt).getTime() -
+        new Date(b.original.createdAt).getTime(),
+    },
+    {
+      accessorFn: (row) => row.updatedAt,
+      id: "updatedAt",
+      header: sortHeader("Updated"),
+      cell: ({ row }) => (
+        <span className="text-xs">
+          {dateFmt.format(new Date(row.original.updatedAt))}
+        </span>
+      ),
+      sortingFn: (a, b) =>
+        new Date(a.original.updatedAt).getTime() -
+        new Date(b.original.updatedAt).getTime(),
+    },
+    {
+      id: "actions",
+      header: () => null,
+      enableSorting: false,
+      enableHiding: false,
+      cell: ({ row }) =>
+        row.original.status === "draft" ? (
+          <CopyPromptButton slug={row.original.slug} project={project} />
+        ) : null,
+    },
+  ];
+}

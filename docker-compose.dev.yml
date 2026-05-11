@@ -9,11 +9,11 @@ services:
     container_name: continuum-api-dev
     init: true
     ports:
-      - "127.0.0.1:6665:6665"
+      - "127.0.0.1:6685:6665"
     environment:
       NODE_ENV: development
       PORT: "6665"
-      CORS_ORIGIN: "http://localhost:6666,http://127.0.0.1:6666"
+      CORS_ORIGIN: "http://localhost:6680,http://127.0.0.1:6680"
       ORCHESTRATOR_DB_PATH: /repo/.local-data/dev-orchestrator.db
       PANEL_REST_ENABLED: "true"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
@@ -25,7 +25,7 @@ services:
       - api_node_modules_root:/repo/node_modules
       - api_node_modules_api:/repo/apps/api/node_modules
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:6665/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:6665/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -75,12 +75,12 @@ services:
       - sh
       - -lc
       - |
-        cd /repo && pnpm install --frozen-lockfile && pnpm --filter @continuum/web dev -- --host 0.0.0.0 --port 6666
+        cd /repo && pnpm install --frozen-lockfile && pnpm --filter @continuum/web dev
     ports:
-      - "127.0.0.1:6666:6666"
+      - "127.0.0.1:6680:7777"
     environment:
       NODE_ENV: development
-      PUBLIC_API_BASE_URL: "http://127.0.0.1:6665"
+      PUBLIC_API_BASE_URL: "http://127.0.0.1:6685"
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "400"
     volumes:
@@ -88,7 +88,7 @@ services:
       - web_node_modules_root:/repo/node_modules
       - web_node_modules_web:/repo/apps/web/node_modules
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:6666/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:7777/panel').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 3s
       retries: 5

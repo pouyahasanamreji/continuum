@@ -21,3 +21,17 @@ export interface AgentFull {
   abandonedReason: string | null;
   deletedAt: string | null;
 }
+
+export interface AgentSummary {
+  slug: string;
+  status: AgentStatus;
+  branch: string;
+  worktree: string;
+  reservedPaths: string[];
+  createdAt: string;
+  dispatchedAt: string | null;
+  updatedAt: string;
+  mergedAt: string | null;
+  mergedCommit: string | null;
+  abandonedReason: string | null;
+}

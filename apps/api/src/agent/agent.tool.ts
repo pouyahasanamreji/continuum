@@ -11,6 +11,9 @@ import type { CreateAgentInput } from './dto/create-agent.dto';
 import { updateAgentDto } from './dto/update-agent.dto';
 import type { UpdateAgentInput } from './dto/update-agent.dto';
 
+const LIST_DEFAULT_LIMIT = 10;
+const LIST_MAX_LIMIT = 50;
+
 function toolError(err: unknown) {
   const msg =
     err instanceof AgentServiceError
@@ -24,6 +27,12 @@ function toolError(err: unknown) {
   };
 }
 
+function toolSuccess(value: unknown) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }],
+  };
+}
+
 @Injectable()
 export class AgentTool {
   constructor(private readonly agents: AgentService) {}
@@ -31,17 +40,21 @@ export class AgentTool {
   @Tool({
     name: 'registry_list',
     description:
-      'List all agents in `project` with status, branch, worktree, reservedPaths. `project` is the canonical absolute path of the working tree (your `pwd`).',
+      'List agent dispatch metadata for `project` (newest first), paginated. Returns `{data, page, limit, hasNextPage}` where each `data` entry carries `slug, status, branch, worktree, reservedPaths, createdAt, dispatchedAt, updatedAt, mergedAt, mergedCommit, abandonedReason` — no `request`, `plan`, `implPrompt`, `coordinationBrief`, `postMergeNotes`. Call `agent_get({project, slug})` for the full record (artifacts + notes). Optional `status` filters to `draft|active|merged|abandoned` (use `status: "active"` for the collision matrix). Optional `page` (default 1) and `limit` (default 10, max 50). When `hasNextPage` is true, increment `page` and call again.',
     parameters: listAgentDto,
   })
   registryList(args: ListAgentDto) {
     try {
-      const all = this.agents.list(args.project);
-      return {
-        content: [
-          { type: 'text' as const, text: JSON.stringify(all, null, 2) },
-        ],
-      };
+      const page = args.page ?? 1;
+      const limit = Math.min(args.limit ?? LIST_DEFAULT_LIMIT, LIST_MAX_LIMIT);
+      const data = this.agents.findManyWithPagination({
+        project: args.project,
+        page,
+        limit,
+        filters: args.status ? { status: args.status } : null,
+      });
+      const hasNextPage = data.length === limit;
+      return toolSuccess({ data, page, limit, hasNextPage });
     } catch (e) {
       return toolError(e);
     }
@@ -49,7 +62,8 @@ export class AgentTool {
 
   @Tool({
     name: 'agent_get',
-    description: 'Get full record for an agent by `project` + `slug`.',
+    description:
+      'Get full record for an agent by `project` + `slug`. Returns every field including `request`, `plan`, `implPrompt`, `coordinationBrief`, `postMergeNotes`. Use this after `registry_list` to drill into any agent whose body you need.',
     parameters: getAgentDto,
   })
   agentGet(args: GetAgentDto) {
@@ -66,11 +80,7 @@ export class AgentTool {
           isError: true,
         };
       }
-      return {
-        content: [
-          { type: 'text' as const, text: JSON.stringify(found, null, 2) },
-        ],
-      };
+      return toolSuccess(found);
     } catch (e) {
       return toolError(e);
     }
@@ -84,12 +94,7 @@ export class AgentTool {
   })
   agentCreate(args: CreateAgentInput) {
     try {
-      const created = this.agents.create(args);
-      return {
-        content: [
-          { type: 'text' as const, text: JSON.stringify(created, null, 2) },
-        ],
-      };
+      return toolSuccess(this.agents.create(args));
     } catch (e) {
       return toolError(e);
     }
@@ -103,12 +108,7 @@ export class AgentTool {
   })
   agentUpdate(args: UpdateAgentInput) {
     try {
-      const updated = this.agents.update(args.slug, args);
-      return {
-        content: [
-          { type: 'text' as const, text: JSON.stringify(updated, null, 2) },
-        ],
-      };
+      return toolSuccess(this.agents.update(args.slug, args));
     } catch (e) {
       return toolError(e);
     }

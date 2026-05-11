@@ -74,7 +74,7 @@ for **Claude Code**, **Codex**, **Cline**, and any MCP-speaking client.
 | You re-explain conventions every session. | `knowledge_search` ranks lessons by relevance; `knowledge_get` pulls the body when needed. |
 | Two parallel agents edit the same file. | `reserved_paths` + status state machine surfaces collisions before dispatch. |
 | Each new task improvises orchestration. | PLOT.md protocol seeded into every project — Intake → Research → Verify → Handoff. |
-| "What did Claude do last week?" | `registry_list` shows every dispatch, status, plan, and merge SHA. |
+| "What did Claude do last week?" | `registry_list` paginates dispatch metadata (slug, status, branch, reserved paths). `agent_get({slug})` pulls the full record. |
 | Knowledge scattered across chat logs. | One SQLite database. One vector index. One source of truth. |
 
 ---
@@ -280,7 +280,8 @@ When work merges, the orchestrator records what was learned via `knowledge_creat
 ### 1. Intake
 
 ```
-registry_list({project})                      // who's active, what paths reserved
+registry_list({project, status:'active'})     // paginated metadata: slug + reservedPaths + timestamps
+agent_get({project, slug})                    // bodies (request/plan/implPrompt/coordinationBrief) per active agent
 knowledge_list({project, kind:'fundamental'}) // binding-rule metadata
 knowledge_get({project, slug})                // body per fundamental slug — read every one
 knowledge_search({project, q: "<task intent>"}) // RAG → ranked metadata
@@ -359,12 +360,14 @@ Every tool takes `project` (canonical absolute path) as its first argument.
 
 | Tool | Purpose |
 |---|---|
-| `registry_list` | Every agent for a project (all statuses) |
-| `agent_get` | Drill into one agent by slug |
+| `registry_list` | Paginated agent metadata — `{data, page, limit, hasNextPage}`. Each `data` row: slug, status, branch, worktree, reservedPaths, timestamps, mergedCommit, abandonedReason. Optional `status` filter; default `limit` 10, max 50. **No artifact bodies.** |
+| `agent_get` | Full record by slug — includes request, plan, implPrompt, coordinationBrief, postMergeNotes |
 | `agent_create` | Persist a draft dispatch record |
 | `agent_update` | Transition status, edit fields |
 
 Allowed transitions: `draft → active → merged | abandoned`. `merged` requires a 7–40 char commit SHA. `abandoned` requires a reason. Only `active` agents reserve paths.
+
+`registry_list` returns the collision matrix metadata in one paginated envelope. To inspect a dispatch's plan or implPrompt, follow with `agent_get({project, slug})`. Page through with `page` until `hasNextPage` is false.
 
 ---
 
@@ -373,7 +376,7 @@ Allowed transitions: `draft → active → merged | abandoned`. `merged` require
 ```
 human: orchestrate adding rate-limit middleware to /api routes
 
-claude: → registry_list({project})           // 0 active
+claude: → registry_list({project, status:'active'})  // 0 active
         → knowledge_list({project, kind:'fundamental'})
                                               // metadata for binding rules
         → knowledge_get({project, slug:'base-branch'})       // → main

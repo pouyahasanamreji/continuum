@@ -115,7 +115,7 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
       .prepare<
         [number],
         KnowledgeEntity
-      >('SELECT * FROM knowledge WHERE id = ? AND deleted_at IS NULL')
+      >(`SELECT k.*, a.slug AS agent_slug FROM knowledge k ` + `JOIN agents a ON a.id = k.agent_id ` + `WHERE k.id = ? AND k.deleted_at IS NULL`)
       .get(id);
     return row ? KnowledgeMapper.toDomain(row) : null;
   }
@@ -125,7 +125,7 @@ export class KnowledgeRelationalRepository extends KnowledgeRepository {
       .prepare<
         [number, string],
         KnowledgeEntity
-      >('SELECT * FROM knowledge WHERE project_id = ? AND slug = ? AND deleted_at IS NULL')
+      >(`SELECT k.*, a.slug AS agent_slug FROM knowledge k ` + `JOIN agents a ON a.id = k.agent_id ` + `WHERE k.project_id = ? AND k.slug = ? AND k.deleted_at IS NULL`)
       .get(projectId, slug);
     return row ? KnowledgeMapper.toDomain(row) : null;
   }

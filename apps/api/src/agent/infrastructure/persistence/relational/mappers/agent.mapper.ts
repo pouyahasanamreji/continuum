@@ -1,4 +1,5 @@
 import { Agent } from '../../../../domain/agent';
+import { AgentSummary } from '../../../../domain/agent-summary';
 import { AgentEntity } from '../entities/agent.entity';
 
 export class AgentMapper {
@@ -25,5 +26,22 @@ export class AgentMapper {
     a.abandonedReason = raw.abandoned_reason;
     a.deletedAt = raw.deleted_at !== null ? new Date(raw.deleted_at) : null;
     return a;
+  }
+
+  static toSummary(raw: AgentEntity): AgentSummary {
+    const s = new AgentSummary();
+    s.slug = raw.slug;
+    s.status = raw.status;
+    s.branch = raw.branch;
+    s.worktree = raw.worktree;
+    s.reservedPaths = JSON.parse(raw.reserved_paths_json) as string[];
+    s.createdAt = new Date(raw.created_at);
+    s.dispatchedAt =
+      raw.dispatched_at !== null ? new Date(raw.dispatched_at) : null;
+    s.updatedAt = new Date(raw.updated_at);
+    s.mergedAt = raw.merged_at !== null ? new Date(raw.merged_at) : null;
+    s.mergedCommit = raw.merged_commit;
+    s.abandonedReason = raw.abandoned_reason;
+    return s;
   }
 }

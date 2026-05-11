@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { patchJson, postJson } from "@/lib/api";
-import type { AgentFull } from "@/types/agent";
+import type { AgentSummary } from "@/types/agent";
 import type { KnowledgeFull } from "@/types/knowledge";
 
 type Mode = "create" | "edit";
@@ -26,7 +26,7 @@ interface Props {
   open: boolean;
   mode: Mode;
   project: string;
-  agents: AgentFull[];
+  agents: AgentSummary[];
   initial: KnowledgeFull | null;
   onOpenChange: (open: boolean) => void;
   onSaved: (k: KnowledgeFull) => void;
@@ -54,8 +54,7 @@ export function KnowledgeFormDialog({
     if (!open) return;
     if (mode === "edit" && initial) {
       setSlug(initial.slug);
-      const a = agents.find((x) => x.id === initial.agentId);
-      setAgentSlug(a?.slug ?? "");
+      setAgentSlug(initial.agentSlug);
       setContent(initial.content);
       setKind(initial.kind ?? "situational");
     } else {

@@ -11,7 +11,12 @@ import { z } from 'zod';
 import { Agent } from '../domain/agent';
 import { AgentStatusEnum } from '../../agent-statuses/agent-statuses.enum';
 
-export const listAgentDto = z.object({ project: z.string() });
+export const listAgentDto = z.object({
+  project: z.string(),
+  status: z.enum(['draft', 'active', 'merged', 'abandoned']).optional(),
+  page: z.number().int().min(1).optional(),
+  limit: z.number().int().min(1).max(50).optional(),
+});
 export type ListAgentDto = z.infer<typeof listAgentDto>;
 
 export class FilterAgentDto {

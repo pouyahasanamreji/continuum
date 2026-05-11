@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { OrchestratorDbService } from '../../../../../database/orchestrator-db.service';
 import { Agent } from '../../../../domain/agent';
+import { AgentSummary } from '../../../../domain/agent-summary';
 import {
   AgentCreatePayload,
   AgentCreateResult,
+  AgentFindManyOptions,
+  AgentListOptions,
   AgentRepository,
   AgentUpdatePatch,
 } from '../../agent.repository';
-import { IPaginationOptions } from '../../../../../utils/types/pagination-options';
 import { AgentEntity } from '../entities/agent.entity';
 import { AgentMapper } from '../mappers/agent.mapper';
 
@@ -17,27 +19,39 @@ export class AgentRelationalRepository extends AgentRepository {
     super();
   }
 
-  findAll(projectId: number): Agent[] {
+  findAll(projectId: number, options?: AgentListOptions): AgentSummary[] {
+    const where: string[] = ['project_id = ?', 'deleted_at IS NULL'];
+    const params: (string | number)[] = [projectId];
+    if (options?.status !== undefined) {
+      where.push('status = ?');
+      params.push(options.status);
+    }
+    const sql =
+      `SELECT * FROM agents WHERE ${where.join(' AND ')} ` +
+      `ORDER BY created_at DESC`;
     const rows = this.dbs.db
-      .prepare<
-        [number],
-        AgentEntity
-      >('SELECT * FROM agents WHERE project_id = ? AND deleted_at IS NULL ORDER BY created_at DESC')
-      .all(projectId);
-    return rows.map((r) => AgentMapper.toDomain(r));
+      .prepare<(string | number)[], AgentEntity>(sql)
+      .all(...params);
+    return rows.map((r) => AgentMapper.toSummary(r));
   }
 
   findManyWithPagination(
     projectId: number,
-    options: IPaginationOptions,
-  ): Agent[] {
+    options: AgentFindManyOptions,
+  ): AgentSummary[] {
+    const where: string[] = ['project_id = ?', 'deleted_at IS NULL'];
+    const params: (string | number)[] = [projectId];
+    if (options.status !== undefined) {
+      where.push('status = ?');
+      params.push(options.status);
+    }
+    const sql =
+      `SELECT * FROM agents WHERE ${where.join(' AND ')} ` +
+      `ORDER BY created_at DESC LIMIT ? OFFSET ?`;
     const rows = this.dbs.db
-      .prepare<
-        [number, number, number],
-        AgentEntity
-      >('SELECT * FROM agents WHERE project_id = ? AND deleted_at IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?')
-      .all(projectId, options.limit, (options.page - 1) * options.limit);
-    return rows.map((r) => AgentMapper.toDomain(r));
+      .prepare<(string | number)[], AgentEntity>(sql)
+      .all(...params, options.limit, (options.page - 1) * options.limit);
+    return rows.map((r) => AgentMapper.toSummary(r));
   }
 
   findById(id: number): Agent | null {

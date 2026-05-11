@@ -18,7 +18,6 @@ import type { KnowledgeFull } from "@/types/knowledge";
 interface Props {
   knowledge: KnowledgeFull | null;
   loading?: boolean;
-  agentSlugById: (agentId: number) => string | null;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -49,23 +48,12 @@ function Section({
   );
 }
 
-function MetadataList({
-  knowledge,
-  agentSlugById,
-}: {
-  knowledge: KnowledgeFull;
-  agentSlugById: (agentId: number) => string | null;
-}) {
-  const agentSlug = agentSlugById(knowledge.agentId);
+function MetadataList({ knowledge }: { knowledge: KnowledgeFull }) {
   const rows: { label: string; value: React.ReactNode }[] = [
     { label: "Slug", value: <span className="font-mono">{knowledge.slug}</span> },
     {
       label: "Agent",
-      value: agentSlug ? (
-        <span className="font-mono">{agentSlug}</span>
-      ) : (
-        <span className="text-muted-foreground">#{knowledge.agentId}</span>
-      ),
+      value: <span className="font-mono">{knowledge.agentSlug}</span>,
     },
     { label: "Kind", value: <span className="font-mono">{knowledge.kind}</span> },
     { label: "Created", value: fmt(knowledge.createdAt) },
@@ -86,7 +74,6 @@ function MetadataList({
 export function KnowledgeDetailDialog({
   knowledge,
   loading,
-  agentSlugById,
   onOpenChange,
 }: Props) {
   const open = knowledge !== null || Boolean(loading);
@@ -99,7 +86,7 @@ export function KnowledgeDetailDialog({
           </DialogTitle>
           <DialogDescription>
             {knowledge
-              ? `Recorded by agent #${knowledge.agentId}`
+              ? `Recorded by agent ${knowledge.agentSlug}`
               : loading
                 ? "Loading lesson..."
                 : "Select a lesson to view details."}
@@ -108,10 +95,7 @@ export function KnowledgeDetailDialog({
         {knowledge ? (
           <div className="space-y-2">
             <Section title="Metadata" defaultOpen>
-              <MetadataList
-                knowledge={knowledge}
-                agentSlugById={agentSlugById}
-              />
+              <MetadataList knowledge={knowledge} />
             </Section>
             <Section title="Content" defaultOpen>
               <MarkdownBody text={knowledge.content || "—"} />

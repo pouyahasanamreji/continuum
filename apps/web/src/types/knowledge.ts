@@ -2,6 +2,7 @@ export interface KnowledgeFull {
   id: number;
   projectId: number;
   agentId: number;
+  agentSlug: string;
   slug: string;
   content: string;
   kind: "fundamental" | "situational";

@@ -20,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { AgentService } from './agent.service';
 import { Agent } from './domain/agent';
+import { AgentSummary } from './domain/agent-summary';
 import { CreateAgentDto } from './dto/create-agent.dto';
 import { UpdateAgentDto } from './dto/update-agent.dto';
 import { QueryAgentDto } from './dto/query-agent.dto';
@@ -44,10 +45,10 @@ export class AgentController {
 
   @Get('agents')
   @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ type: InfinityPaginationResponse(Agent) })
+  @ApiOkResponse({ type: InfinityPaginationResponse(AgentSummary) })
   listAgents(
     @Query() query: QueryAgentDto,
-  ): InfinityPaginationResponseDto<Agent> {
+  ): InfinityPaginationResponseDto<AgentSummary> {
     if (!query.project) missingProject();
     try {
       const page = query?.page ?? 1;

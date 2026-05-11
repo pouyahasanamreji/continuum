@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Agent } from './domain/agent';
+import { AgentSummary } from './domain/agent-summary';
+import { AgentStatusEnum } from '../agent-statuses/agent-statuses.enum';
 import { AgentServiceError } from '../common/errors/service-errors';
 import { SLUG_RE } from '../common/slug';
 import {
@@ -26,16 +28,17 @@ export class AgentService {
     return id;
   }
 
-  list(projectPath: string): Agent[] {
+  list(projectPath: string, status?: AgentStatusEnum): AgentSummary[] {
     const projectId = this.resolveProjectIdOrThrow(projectPath);
-    return this.repo.findAll(projectId);
+    return this.repo.findAll(projectId, status ? { status } : undefined);
   }
 
-  findManyWithPagination(queryAgentDto: QueryAgentDto): Agent[] {
+  findManyWithPagination(queryAgentDto: QueryAgentDto): AgentSummary[] {
     const projectId = this.resolveProjectIdOrThrow(queryAgentDto.project);
     return this.repo.findManyWithPagination(projectId, {
       page: queryAgentDto.page ?? 1,
       limit: queryAgentDto.limit ?? 10,
+      status: queryAgentDto.filters?.status ?? undefined,
     });
   }
 

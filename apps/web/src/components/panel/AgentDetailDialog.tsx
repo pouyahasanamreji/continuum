@@ -12,11 +12,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { MarkdownBody } from "./MarkdownBody";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useActiveProject } from "@/lib/use-active-project";
 import type { AgentFull } from "@/types/agent";
 
 interface Props {
   agent: AgentFull | null;
+  loading?: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
@@ -92,10 +94,11 @@ function MetadataList({ agent }: { agent: AgentFull }) {
   );
 }
 
-export function AgentDetailDialog({ agent, onOpenChange }: Props) {
+export function AgentDetailDialog({ agent, loading, onOpenChange }: Props) {
   const activeProject = useActiveProject();
+  const open = agent !== null || Boolean(loading);
   return (
-    <Dialog open={agent !== null} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-5xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
@@ -104,7 +107,9 @@ export function AgentDetailDialog({ agent, onOpenChange }: Props) {
           <DialogDescription>
             {agent
               ? `${agent.status} · ${agent.branch}`
-              : "Select an agent to view details."}
+              : loading
+                ? "Loading agent..."
+                : "Select an agent to view details."}
           </DialogDescription>
         </DialogHeader>
         {agent ? (
@@ -151,6 +156,11 @@ export function AgentDetailDialog({ agent, onOpenChange }: Props) {
               </Section>
             </div>
           </>
+        ) : loading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-1/3" />
+            <Skeleton className="h-48 w-full" />
+          </div>
         ) : null}
       </DialogContent>
     </Dialog>
