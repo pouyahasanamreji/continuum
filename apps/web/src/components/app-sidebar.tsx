@@ -3,12 +3,10 @@
 import * as React from "react"
 
 import { NavMain } from "@/components/nav-main"
-import { NavUser } from "@/components/nav-user"
 import { ProjectSwitcher } from "@/components/panel/ProjectSwitcher"
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar"
@@ -23,11 +21,6 @@ import {
 import { withBase } from "@/lib/base-path"
 
 const data = {
-  user: {
-    name: "orchestrator",
-    email: "automationteam@sigmatelecom.com",
-    avatar: "",
-  },
   navMain: [
     {
       title: "Dashboard",
@@ -80,9 +73,6 @@ export function AppSidebar({
       <SidebarContent>
         <NavMain items={navItemsWithActive} />
       </SidebarContent>
-      <SidebarFooter>
-        <NavUser user={data.user} />
-      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   )
