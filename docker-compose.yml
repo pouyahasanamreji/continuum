@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    image: pouyahasanamreji/continuum:0.2.0
+    image: pouyahasanamreji/continuum:0.3.0
     container_name: continuum-api
     init: true
     restart: unless-stopped
