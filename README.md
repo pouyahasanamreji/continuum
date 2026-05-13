@@ -2,10 +2,10 @@
 
 # Continuum
 
-### **The MCP-native memory layer for agent swarms.**
+### **Shared memory + orchestration for your coding agents.**
 
-Persistent vector memory, semantic knowledge recall, and multi-agent orchestration —<br/>
-for **Claude Code**, **Codex**, **Cline**, and any MCP-speaking client.
+One MCP server. Tell any client to read the plot — it becomes the orchestrator. <br/>
+Dispatches fresh agents in isolated worktrees, shares lessons across every Claude Code / Codex / Cline chat on the project.
 
 [![Node](https://img.shields.io/badge/node-%3E%3D22.12.0-brightgreen?style=for-the-badge)](package.json)
 [![pnpm](https://img.shields.io/badge/pnpm-10.33-orange?style=for-the-badge)](package.json)
@@ -16,35 +16,38 @@ for **Claude Code**, **Codex**, **Cline**, and any MCP-speaking client.
 
 [Quick Start](#quick-start) • [Memory & Vectors](#memory--vectors) • [Workflow](#the-workflow) • [MCP Tools](#mcp-tools) • [Wire It In](#wire-it-into-your-ai-client) • [Configuration](#configuration)
 
+![Two Claude Code chats sharing memory through Continuum — left reads the plot and dispatches, right runs the work and updates status](docs/assets/hero-two-chats.png)
+
 </div>
 
 ---
 
 > **Your agents forget. Continuum remembers.**
 >
-> Every Claude Code session ends with hard-won context evaporating. Every Codex run rediscovers the same conventions. Every parallel agent risks editing the same file as the last one. Continuum fixes all three with one local server: an embedded vector database, a canonical orchestration protocol, and a durable agent registry — shared across every MCP client on your machine.
+> Point any MCP client at Continuum and tell it to read the plot. The client becomes an orchestrator — it researches the codebase, verifies the plan, persists a dispatch record, and hands you a ready-to-paste prompt for a fresh agent in an isolated git worktree. Every other Claude Code / Codex / Cline chat on the project sees what's reserved, shares what's been learned, and never re-explains the codebase. One local server: vector knowledge base, orchestration protocol, agent registry — shared across every MCP-speaking app on your machine.
 
-```
-   ┌──────────────┐  ┌────────┐  ┌───────┐  ┌────────┐
-   │  Claude Code │  │ Codex  │  │ Cline │  │  YOU   │
-   └──────┬───────┘  └────┬───┘  └───┬───┘  └────┬───┘
-          │ MCP            │ MCP      │ MCP       │ HTTP
-          └────────┬───────┴──────────┴───────────┘
-                   ▼
-          ╔══════════════════════════════════════╗
-          ║         CONTINUUM ORCHESTRATOR           ║
-          ║  ┌────────────┐  ┌────────────────┐  ║
-          ║  │  PLOT.md   │  │   KNOWLEDGE    │  ║
-          ║  │  protocol  │  │  (vectorized)  │  ║
-          ║  └────────────┘  └────────────────┘  ║
-          ║  ┌────────────┐  ┌────────────────┐  ║
-          ║  │   AGENTS   │  │   WEB PANEL    │  ║
-          ║  │  registry  │  │   (humans)     │  ║
-          ║  └────────────┘  └────────────────┘  ║
-          ╚══════════════════════════════════════╝
-                   │
-              SQLite + sqlite-vec
-              (one file, your disk)
+```mermaid
+flowchart TD
+    CC["Claude Code"]
+    CX["Codex"]
+    CL["Cline"]
+    YOU["YOU"]
+
+    subgraph CONTINUUM["CONTINUUM ORCHESTRATOR"]
+        direction LR
+        PLOT["PLOT.md<br/>protocol"]
+        KNOW["KNOWLEDGE<br/>(vectorized)"]
+        AGENTS["AGENTS<br/>registry"]
+        PANEL["WEB PANEL<br/>(humans)"]
+    end
+
+    DB[("SQLite + sqlite-vec<br/>one file, your disk")]
+
+    CC -- MCP --> CONTINUUM
+    CX -- MCP --> CONTINUUM
+    CL -- MCP --> CONTINUUM
+    YOU -- HTTP --> CONTINUUM
+    CONTINUUM --> DB
 ```
 
 > **No SaaS. No telemetry. No keys to manage.** Boots in seconds. Survives reboots. Scales with you.
@@ -63,6 +66,7 @@ for **Claude Code**, **Codex**, **Cline**, and any MCP-speaking client.
 | 🖥️ **Human web panel** | Astro + React UI to browse projects, agents, plot, and knowledge while AI clients drive everything via MCP. |
 | 🔌 **Client-agnostic** | Standard MCP / Streamable HTTP. Works with Claude Code, Codex, Cline, Cursor, or anything that speaks the protocol. |
 | 🔒 **Local-first** | One SQLite file. WAL mode. No cloud. Optional embedder is your call (Ollama, TEI, anything OpenAI-shaped). |
+| 📦 **One container in prod** | Single image, one HTTP port, one mounted volume. Drop on any host, point your MCP clients at it. |
 
 ---
 
@@ -417,6 +421,10 @@ Next time anyone — you, Claude, Codex — touches anything rate-limit-shaped o
 ---
 
 ## Web panel
+
+![Agents registry — slug, status, branch, reserved-path count, timestamps](docs/assets/panel-agents.png)
+
+![Knowledge browser — a fundamental lesson opened, metadata + content](docs/assets/panel-knowledge.png)
 
 Astro 6 + React 19 islands. Tailwind v4. shadcn/ui.
 
