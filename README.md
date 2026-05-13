@@ -1,6 +1,6 @@
 <div align="center">
 
-# Continuum
+<img src="docs/assets/continuum.png" alt="Continuum" width="640" />
 
 ### **Shared memory + orchestration for your coding agents.**
 
@@ -97,9 +97,9 @@ What you get:
 
 | Service | URL | What it is |
 |---|---|---|
-| **api** | http://localhost:7776 | NestJS + MCP server. Swagger at `/docs`. Hot-reloaded on file change. |
-| **web** | http://localhost:7777 | Astro + React panel. Hot-reloaded. |
-| **sqlite-web** | http://localhost:7778 | Browser UI for the live SQLite database — inspect projects, agents, knowledge, vectors. Loads `sqlite-vec` automatically. |
+| **api** | http://localhost:6685 | NestJS + MCP server. Swagger at `/docs`. Hot-reloaded on file change. |
+| **web** | http://localhost:6680 | Astro + React panel. Hot-reloaded. |
+| **sqlite-web** | http://localhost:6667 | Browser UI for the live SQLite database — inspect projects, agents, knowledge, vectors. Loads `sqlite-vec` automatically. |
 | **embedder** (optional) | http://localhost:8080 | Hugging Face TEI running an HTTP embedder. Off by default. |
 
 The API embeds in-process by default (`Snowflake/snowflake-arctic-embed-m-v1.5` via Transformers.js, 768-dim, ONNX q8). No external service required for semantic search. Override via `EMBEDDER_URL` to point at any HTTP-based embedder (Ollama, TEI, OpenAI-compatible). Turn the bundled TEI container on with the `embedder` profile:
