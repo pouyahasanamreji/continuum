@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
   "name": "io.github.pouyahasanamreji/continuum",
-  "description": "The MCP-native memory layer for agent swarms. Persistent vector memory, semantic knowledge recall, and multi-agent orchestration. Local-first SQLite + sqlite-vec.",
+  "description": "Shared memory + orchestration for your coding agents. Local-first MCP, vector RAG.",
   "version": "0.3.0",
   "repository": {
     "url": "https://github.com/pouyahasanamreji/continuum",
@@ -11,9 +11,8 @@
   "packages": [
     {
       "registryType": "oci",
-      "registryBaseUrl": "https://docker.io",
-      "identifier": "pouyahasanamreji/continuum",
-      "version": "0.3.0",
+      "runtimeHint": "docker",
+      "identifier": "docker.io/pouyahasanamreji/continuum:0.3.0",
       "transport": {
         "type": "streamable-http",
         "url": "http://localhost:7776/mcp"
